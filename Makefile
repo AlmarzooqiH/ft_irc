@@ -16,7 +16,10 @@ all: $(PROGRAM_NAME)
 $(PROGRAM_NAME): $(OBJS_FILES)
 	$(COMPILER) $(FLAGS) $^ -o $@
 
-$(OBJS_DIR)/%.o: $(SRC_DIR)/%.cpp
+$(OBJS_DIR):
+	mkdir -p $(OBJS_DIR)
+
+$(OBJS_DIR)/%.o: $(SRC_DIR)/%.cpp | $(OBJS_DIR)
 	$(COMPILER) $(FLAGS) -c $< -o $@
 
 clean:
