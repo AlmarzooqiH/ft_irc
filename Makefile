@@ -26,7 +26,7 @@ clean:
 	rm -rf $(OBJS_DIR)/*.o
 
 fclean: clean
-	rm -rf $(PROGRAM_NAME)
+	rm -rf $(PROGRAM_NAME) $(OBJS_DIR)
 
 re: fclean all
 
