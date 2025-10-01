@@ -1,2 +1,85 @@
-ft_irc requirements:
+IMPORTANT NOTE:
+Refer to the subject file for accurate details since i have tried to simplify some stuff.
+
+==============================
+
+ft_irc Descripton & Requirements:
+
+Description: (I)nternet (R)elay (C)hat is a text-based communication protocol on the Internet.
+It offers real-time messaging that can be either public or private. Users can exchange
+direct messages and join group channels.
+IRC clients connect to IRC servers in order to join channels. IRC servers are connected
+together to form a network.
+
+Allowed functions:
+Everything in C++ 98.
+socket, close, setsockopt, getsockname,
+getprotobyname, gethostbyname, getaddrinfo,
+freeaddrinfo, bind, connect, listen, accept, htons,
+htonl, ntohs, ntohl, inet_addr, inet_ntoa, send,
+recv, signal, sigaction, lseek, fstat, fcntl, poll
+(or equivalent)
+
+==============================
+
+We must not develop the client nor handle server to server communication. All we have to do is develop the server.
+
+The program name is: ircserv and is executed as follows:
+./ircserv [port] [password]
+
+=================================
+
+Stuff to keep in mind:
+
+The server must be able to handle multiple clients at the same time with out hanging.
+
+We are not allowed to create child proccess thus all I/O operations must be in a Non-blocking fashion.
+
+For managing sockets we will be using the poll() function or any equivenlant. [Note] I wanted to used epoll() because it is more dynamic but unfournelty it is Linux specific. If we want compatibility with MacOS and Linux we will use poll() or select().
+
+The subject stated we are allowed to use 1 poll() or any equivenlant to handle all operations.
+
+We are allowed to use an external IRC client for a reference to check if our IRC server is working fine. [Note] That same client we chose for reference will be used in the evaluation.
+
+The communication between the client and server must be done via TCP/IP (v4 or v6).
+
+=================================
+
+We must implement the following features:
+
+1) You must be able to authenticate, set a nickname, a username, join a channel,
+send and receive private messages using your reference client.
+
+2) All the messages sent from one client to a channel have to be forwarded to
+every other client that joined the channel.
+
+3) You must have operators and regular users. Aka roles.
+
+4) Then, you have to implement the commands that are specific to channel
+operators:
+∗ KICK - Eject a client from the channel
+∗ INVITE - Invite a client to a channel
+∗ TOPIC - Change or view the channel topic
+∗ MODE - Change the channel’s mode:
+· i: Set/remove Invite-only channel
+· t: Set/remove the restrictions of the TOPIC command to channel
+operators
+· k: Set/remove the channel key (password)
+· o: Give/take channel operator 
+· l: Set/remove the user limit to channel
+
+Finally: Of course, you are expected to write a clean code.
+
+=================================
+
+Subject Note:
+For MacOS only
+Since MacOS doesn’t implement write() the same way as other Unix
+OSes, you are allowed to use fcntl().
+You must use file descriptors in non-blocking mode in order to get a
+behavior similar to the one of other Unix OSes.
+However, you are allowed to use fcntl() only as follows:
+fcntl(fd, F_SETFL, O_NONBLOCK);
+Any other flag is forbidden.
+
 
