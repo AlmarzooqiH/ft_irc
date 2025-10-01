@@ -23,20 +23,9 @@
 # define IRC_HPP
 
 /*
-    Convient includes that will need. If you will add something make sure it is c++98 compliant.
-    -Hamad :P
+    Custom classes
 */
-# include <iostream>
-# include <exception>
-# include <string>
-# include <sstream>
-# include <algorithm>
+# include "Server.hpp"
+# include "Constants.hpp"
 
-/*
- Socket programming includes. If something please add it or inform me.
- -Hamad :P
-*/
-# include <sys/socket.h>
-# include <netinet/in.h>
-# include <netdb.h>
 #endif

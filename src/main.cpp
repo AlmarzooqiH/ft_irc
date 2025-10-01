@@ -10,7 +10,7 @@
 /*                                                                            */
 /* ************************************************************************** */
 
-#include "../includes/irc.hpp"
+#include "../includes/Irc.hpp"
 
 int main(int ac, char **av){
     if (ac != 3){
@@ -21,5 +21,11 @@ int main(int ac, char **av){
     std::stringstream(av[1]) >> port;
     std::string password(av[2]);
     std::cout << "Port to connect to: " << port << ", the password is: " << password << std::endl;
+    int serverFd = socket(AF_INET, SOCK_STREAM, SOCK_NONBLOCK);
+    if (serverFd < 0){
+        std::cerr << "Failed to initalize the server socket" << std::endl;
+        return (2);
+    }
+    // int bindVal = bind(serverFd, 
     return (0);
 }
