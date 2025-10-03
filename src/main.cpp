@@ -17,15 +17,22 @@ int main(int ac, char **av){
         std::cerr << "Input must be: ./ircserv [port] [password]" << std::endl;
         return (2);
     }
-    unsigned int port = 0;
-    std::stringstream(av[1]) >> port;
-    std::string password(av[2]);
-    std::cout << "Port to connect to: " << port << ", the password is: " << password << std::endl;
-    int serverFd = socket(AF_INET, SOCK_STREAM, SOCK_NONBLOCK);
-    if (serverFd < 0){
-        std::cerr << "Failed to initalize the server socket" << std::endl;
+    try{
+        int port = 0;
+        std::stringstream(av[1]) >> port;
+        std::string password(av[2]);
+        /**
+         * Why HAI?
+         * (H)amad
+         * (Abdullah)
+         * (I)smail
+         * -Hamad
+         */
+        Server HAI_Server(port, password);
+    } catch (std::exception& err){
+        std::cerr << err.what() << std::endl;
         return (2);
     }
-    // int bindVal = bind(serverFd, 
+
     return (0);
 }
