@@ -6,7 +6,7 @@
 /*   By: hamalmar <hamalmar@student.42abudhabi.a    +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2025/10/01 17:04:26 by hamalmar          #+#    #+#             */
-/*   Updated: 2025/10/01 17:22:40 by hamalmar         ###   ########.fr       */
+/*   Updated: 2025/10/03 19:34:01 by hamalmar         ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
@@ -21,9 +21,25 @@ class Server{
 
 	private:
 		int port;
-		sockaddr_in ipvFour;
-		int	serverFd;
+		/**
+			* @brief sockaddr_in is used to describe the Server Address.
+			* It has the following fields:
+			*
+			* @var sin_family  Holds the value of the address family (AF_INET for IPv4).
+			* @var sin_port    Holds the port number. Assign using htons(this->port).
+			* @var sin_addr    Holds the IP address. sin_addr is a struct with one member:
+			*                 in_addr_t s_addr, assigned like this: sin_addr.s_addr = inet_addr("IP Address");
+			* @var sin_zero    Padding to make sockaddr_in the same size as sockaddr.
+			*
+			* @note sin_ is a prefix for Socket Internet.
+		*/
+		sockaddr_in serverAddress;
+		//This will hold the server socket file descriptor.
+		int	serverSocket;
+		//This will hold the poll file descriptor.
 		int	pollFd;
+		//This will hold the server password.
+		std::string password;
 
 		Server();
 		Server(const Server& right);
@@ -31,10 +47,41 @@ class Server{
 
 	public:
 		~Server();
-		Server(int port);
-	
+		Server(int port, std::string& password);
+
+		class InvalidPortNumberException: public std::exception{
+			public:
+				const char	*what() const throw();
+		};
+
+		class PasswordCannotBeEmptyException: public std::exception{
+			public:
+				const char	*what() const throw();
+		};
+
 		class FailedToInitServerSocketException: public std::exception{
-			const char	*what() const throw();
+			public:
+				const char	*what() const throw();
+		};
+
+		class FailedToBindServerSocketException: public std::exception{
+			public:
+				const char	*what() const  throw();
+		};
+
+		class FailedToInitPollException: public std::exception{
+			public:
+				const char	*what() const throw();
+		};
+
+		class FailedToListenException: public std::exception{
+			public:
+				const char	*what() const throw();
+		};
+
+		class ReservedPortException: public std::exception{
+			public:
+				const char	*what() const throw();
 		};
 };
 
