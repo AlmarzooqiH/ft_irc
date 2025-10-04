@@ -6,7 +6,7 @@
 /*   By: hamalmar <hamalmar@student.42abudhabi.a    +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2025/10/01 23:00:19 by hamalmar          #+#    #+#             */
-/*   Updated: 2025/10/03 19:41:59 by hamalmar         ###   ########.fr       */
+/*   Updated: 2025/10/04 15:06:18 by hamalmar         ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
@@ -16,7 +16,7 @@ Server::Server(){}
 Server::Server(const Server& right){
 	this->port = right.port;
 	this->serverSocket = right.serverSocket;
-	this->pollFd = right.pollFd;
+	this->pollManager = right.pollManager;
 	this->serverAddress = right.serverAddress;
 }
 
@@ -24,7 +24,7 @@ Server& Server::operator=(const Server& right){
 	if (this != &right){
 		this->port = right.port;
 		this->serverSocket = right.serverSocket;
-		this->pollFd = right.pollFd;
+		this->pollManager = right.pollManager;
 		this->serverAddress = right.serverAddress;
 	}
 	return (*this);
@@ -68,15 +68,36 @@ Server::Server(int port, std::string& password){
 	int listenResult = listen(this->serverSocket, NUMBER_OF_CLIENTS);
 	if (listenResult < 0)
 		throw (Server::FailedToListenException());
+	try {
+		this->clients = new pollfd[NUMBER_OF_CLIENTS];
+
+	} catch (std::exception& err){
+		(void)err;
+		throw (Server::FailedToInitalizePollFd());
+	}
 }
 
 Server::~Server(){
 	this->port = -1;
-	if (this->serverSocket >= 0)
+	if (this->serverSocket >= 0){
 		close(this->serverSocket);
-	if (this->pollFd >= 0)
-		close(this->pollFd);
-	
+		this->serverSocket = -1;
+	}
+	if (this->pollManager >= 0){
+		close(this->pollManager);
+		this->pollManager = -1;
+	}
+	this->serverAddress.sin_family = 0;
+	this->serverAddress.sin_port = 0;
+	this->serverAddress.sin_addr.s_addr = 0;
+	for (size_t i = 0; i < 8; i++){
+		this->serverAddress.sin_zero[i] = 0;
+	}
+
+	if (this->clients){
+		delete (this->clients);
+		this->clients = NULL;
+	}
 }
 
 const char	*Server::InvalidPortNumberException::what() const throw(){
@@ -105,4 +126,8 @@ const char	*Server::FailedToListenException::what() const throw(){
 
 const char	*Server::ReservedPortException::what() const throw(){
 	return ("Ports between 0 and 1023 are system reserved.");
+}
+
+const char	*Server::FailedToInitalizePollFd::what() const throw(){
+	return ("The server failed to allocate memorey for pollfd.");
 }
