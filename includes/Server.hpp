@@ -6,7 +6,7 @@
 /*   By: hamalmar <hamalmar@student.42abudhabi.a    +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2025/10/01 17:04:26 by hamalmar          #+#    #+#             */
-/*   Updated: 2025/10/03 19:34:01 by hamalmar         ###   ########.fr       */
+/*   Updated: 2025/10/04 17:04:30 by hamalmar         ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
@@ -32,14 +32,17 @@ class Server{
 			* @var sin_zero    Padding to make sockaddr_in the same size as sockaddr.
 			*
 			* @note sin_ is a prefix for Socket Internet.
+			-Hamad
 		*/
 		sockaddr_in serverAddress;
 		//This will hold the server socket file descriptor.
 		int	serverSocket;
 		//This will hold the poll file descriptor.
-		int	pollFd;
+		int	pollManager;
 		//This will hold the server password.
 		std::string password;
+
+		pollfd *clients;
 
 		Server();
 		Server(const Server& right);
@@ -48,7 +51,7 @@ class Server{
 	public:
 		~Server();
 		Server(int port, std::string& password);
-
+		void	start(void);
 		class InvalidPortNumberException: public std::exception{
 			public:
 				const char	*what() const throw();
@@ -80,6 +83,11 @@ class Server{
 		};
 
 		class ReservedPortException: public std::exception{
+			public:
+				const char	*what() const throw();
+		};
+
+		class FailedToInitalizePollFd: public std::exception{
 			public:
 				const char	*what() const throw();
 		};
