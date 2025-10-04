@@ -6,7 +6,7 @@
 /*   By: hamalmar <hamalmar@student.42abudhabi.a    +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2025/10/01 17:13:52 by hamalmar          #+#    #+#             */
-/*   Updated: 2025/10/01 17:14:15 by hamalmar         ###   ########.fr       */
+/*   Updated: 2025/10/04 22:47:09 by hamalmar         ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
@@ -15,7 +15,7 @@
 
 /*
  Socket programming includes. If something please add it or inform me.
- -Hamad :P
+ @author Hamad :P
 */
 # include <sys/socket.h>
 # include <sys/types.h>
