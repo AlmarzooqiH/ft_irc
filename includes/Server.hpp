@@ -6,7 +6,7 @@
 /*   By: hamalmar <hamalmar@student.42abudhabi.a    +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2025/10/01 17:04:26 by hamalmar          #+#    #+#             */
-/*   Updated: 2025/10/04 17:04:30 by hamalmar         ###   ########.fr       */
+/*   Updated: 2025/10/04 23:09:39 by hamalmar         ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
@@ -32,17 +32,36 @@ class Server{
 			* @var sin_zero    Padding to make sockaddr_in the same size as sockaddr.
 			*
 			* @note sin_ is a prefix for Socket Internet.
-			-Hamad
+			* @author Hamad
 		*/
 		sockaddr_in serverAddress;
 		//This will hold the server socket file descriptor.
 		int	serverSocket;
-		//This will hold the poll file descriptor.
+		//This will hold the file descriptors that contains events by the poll().
 		int	pollManager;
 		//This will hold the server password.
 		std::string password;
 
+		/**
+		 * @brief pollfd is going to be used by the @var pollManager where cli-
+		 * -ent is gonna have the size of the constant NUMBER_OF_CLIENTS which
+		 * is defined in Constants.hpp
+		 * 
+		 * pollfd is defined as follows according to man poll:
+		 *            struct pollfd {
+         *      int   fd;         file descriptor
+         *      short events;     requested events
+         *      short revents;    returned events
+         *  };
+		 * 
+		 * Also check poll.h
+		 * 
+		 * @author Hamad
+		 */
 		pollfd *clients;
+
+		//This will be used for the event loop.
+		bool isRunning;
 
 		Server();
 		Server(const Server& right);
