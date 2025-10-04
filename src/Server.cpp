@@ -6,7 +6,7 @@
 /*   By: hamalmar <hamalmar@student.42abudhabi.a    +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2025/10/01 23:00:19 by hamalmar          #+#    #+#             */
-/*   Updated: 2025/10/04 15:06:18 by hamalmar         ###   ########.fr       */
+/*   Updated: 2025/10/04 23:26:50 by hamalmar         ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
@@ -44,7 +44,7 @@ Server::Server(int port, std::string& password){
 		SOCK_STREAM provides 2 way communication.
 		IPPROTO_TCP is the TCP protocol.
 
-		-Hamad
+		@author Hamad
 	*/
 	this->serverSocket = socket(AF_INET, SOCK_STREAM, IPPROTO_TCP);
 	if (this->serverSocket < 0)
@@ -75,18 +75,18 @@ Server::Server(int port, std::string& password){
 		(void)err;
 		throw (Server::FailedToInitalizePollFd());
 	}
+	this->isRunning = true;
 }
 
 Server::~Server(){
+	this->isRunning = false;
 	this->port = -1;
 	if (this->serverSocket >= 0){
 		close(this->serverSocket);
 		this->serverSocket = -1;
 	}
-	if (this->pollManager >= 0){
-		close(this->pollManager);
+	if (this->pollManager >= 0)
 		this->pollManager = -1;
-	}
 	this->serverAddress.sin_family = 0;
 	this->serverAddress.sin_port = 0;
 	this->serverAddress.sin_addr.s_addr = 0;
@@ -95,10 +95,32 @@ Server::~Server(){
 	}
 
 	if (this->clients){
-		delete (this->clients);
+		delete[] (this->clients);
 		this->clients = NULL;
 	}
 }
+
+void	Server::start(void){
+	while (this->isRunning){
+		this->pollManager = poll(this->clients, NUMBER_OF_CLIENTS, MS_TIMEOUT);
+		if (this->pollManager < 0){
+			std::cerr << "\033[1;31mServer poll manager fail\033[0m" << std::endl;
+			continue ;
+		}
+		else if (this->pollManager == 0){
+			std::cerr << "\033[1;33mServer poll manager timed out\033[0m" << std::endl;
+			continue ;
+		}
+			std::cout << "\033[1;32mServer poll manager operations start\033[0m" << std::endl;
+			for (int i = 0; i < this->pollManager; i++){
+				/*
+				Here is where we are gonna check the client events. Anyways its
+				11:26:35PM as im writing this imma head to sleep right now.
+				*/
+			}
+	}
+}
+
 
 const char	*Server::InvalidPortNumberException::what() const throw(){
 	return ("Invalid Port. Port must be between 0 and 65535");
