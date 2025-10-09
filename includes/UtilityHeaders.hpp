@@ -6,7 +6,7 @@
 /*   By: hamalmar <hamalmar@student.42abudhabi.a    +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2025/10/01 17:21:20 by hamalmar          #+#    #+#             */
-/*   Updated: 2025/10/04 22:56:36 by hamalmar         ###   ########.fr       */
+/*   Updated: 2025/10/08 19:37:57 by hamalmar         ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
@@ -26,5 +26,7 @@
 # include <unistd.h>
 # include <signal.h>
 # include <limits>
+# include <vector>
+# include <fstream>
 
 #endif

@@ -23,7 +23,7 @@ $(OBJS_DIR)/%.o: $(SRC_DIR)/%.cpp | $(OBJS_DIR)
 	$(COMPILER) $(FLAGS) -c $< -o $@
 
 clean:
-	rm -rf $(OBJS_DIR)/*.o
+	rm -rf *.log $(OBJS_DIR)/*.o
 
 fclean: clean
 	rm -rf $(PROGRAM_NAME) $(OBJS_DIR)

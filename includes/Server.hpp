@@ -6,7 +6,7 @@
 /*   By: hamalmar <hamalmar@student.42abudhabi.a    +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2025/10/01 17:04:26 by hamalmar          #+#    #+#             */
-/*   Updated: 2025/10/04 23:09:39 by hamalmar         ###   ########.fr       */
+/*   Updated: 2025/10/08 22:52:29 by hamalmar         ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
@@ -47,11 +47,11 @@ class Server{
 		 * -ent is gonna have the size of the constant NUMBER_OF_CLIENTS which
 		 * is defined in Constants.hpp
 		 * 
-		 * pollfd is defined as follows according to man poll:
+		 * pollfd is defined as follows according to man 2 poll:
 		 *            struct pollfd {
          *      int   fd;         file descriptor
-         *      short events;     requested events
-         *      short revents;    returned events
+         *      short events;     requested events (What we want from the poll())
+         *      short revents;    returned events (What we get from the poll())
          *  };
 		 * 
 		 * Also check poll.h
@@ -91,11 +91,6 @@ class Server{
 				const char	*what() const  throw();
 		};
 
-		class FailedToInitPollException: public std::exception{
-			public:
-				const char	*what() const throw();
-		};
-
 		class FailedToListenException: public std::exception{
 			public:
 				const char	*what() const throw();
@@ -107,6 +102,15 @@ class Server{
 		};
 
 		class FailedToInitalizePollFd: public std::exception{
+			public:
+				const char	*what() const throw();
+		};
+		class FailedToMakeTheSocketNonBlockingException: public std::exception{
+			public:
+				const char	*what() const throw();
+		};
+
+		class FailedToSetSocketOptionsException: public std::exception{
 			public:
 				const char	*what() const throw();
 		};

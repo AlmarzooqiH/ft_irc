@@ -6,7 +6,7 @@
 /*   By: hamalmar <hamalmar@student.42abudhabi.a    +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2025/10/01 23:00:19 by hamalmar          #+#    #+#             */
-/*   Updated: 2025/10/04 23:26:50 by hamalmar         ###   ########.fr       */
+/*   Updated: 2025/10/08 23:50:05 by hamalmar         ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
@@ -57,6 +57,10 @@ Server::Server(int port, std::string& password){
 	for (int i = 0; i < 8; i++)
 		this->serverAddress.sin_zero[i] = 0;
 
+	int enable = 1;
+	int setsockoptResult = setsockopt(this->serverSocket, SOL_SOCKET, SO_REUSEADDR, &enable, sizeof(enable));
+	if (setsockoptResult < 0)
+		throw (Server::FailedToSetSocketOptionsException());
 	int bindResult = bind(
 		this->serverSocket,
 		(sockaddr *)&this->serverAddress,
@@ -68,9 +72,23 @@ Server::Server(int port, std::string& password){
 	int listenResult = listen(this->serverSocket, NUMBER_OF_CLIENTS);
 	if (listenResult < 0)
 		throw (Server::FailedToListenException());
+	/*
+		Added 0 at the end becuase it will tell the function when to stop the
+		varadic function.
+	*/	
+	int socketFlags = fcntl(this->serverSocket, F_GETFL, 0);
+	int fcntlResult = fcntl(this->serverSocket, F_SETFL, socketFlags | O_NONBLOCK);
+	if (fcntlResult < 0)
+		throw (Server::FailedToMakeTheSocketNonBlockingException());
 	try {
 		this->clients = new pollfd[NUMBER_OF_CLIENTS];
-
+		for (unsigned int i = 0; i < NUMBER_OF_CLIENTS; i++){
+			this->clients[i].fd = -1;
+			this->clients[i].events = 0;
+			this->clients[i].revents = 0;
+		}
+		this->clients[0].fd = this->serverSocket;
+		this->clients[0].events = POLLIN;
 	} catch (std::exception& err){
 		(void)err;
 		throw (Server::FailedToInitalizePollFd());
@@ -101,55 +119,64 @@ Server::~Server(){
 }
 
 void	Server::start(void){
+	std::ofstream logFile("server.log");
+	std::ofstream errorLogFile("serverError.log");
 	while (this->isRunning){
 		this->pollManager = poll(this->clients, NUMBER_OF_CLIENTS, MS_TIMEOUT);
-		if (this->pollManager < 0){
-			std::cerr << "\033[1;31mServer poll manager fail\033[0m" << std::endl;
-			continue ;
-		}
-		else if (this->pollManager == 0){
-			std::cerr << "\033[1;33mServer poll manager timed out\033[0m" << std::endl;
-			continue ;
-		}
-			std::cout << "\033[1;32mServer poll manager operations start\033[0m" << std::endl;
-			for (int i = 0; i < this->pollManager; i++){
-				/*
-				Here is where we are gonna check the client events. Anyways its
-				11:26:35PM as im writing this imma head to sleep right now.
-				*/
-			}
-	}
-}
 
+			if (this->clients[0].revents & POLLIN){
+				int clientSocket = accept(this->clients[0].fd, NULL, NULL);
+				if (clientSocket < 0){
+					errorLogFile << "Failed to accept client T-T </3" << std::endl;
+					continue ;
+				}
+				for (int i = 1; i < NUMBER_OF_CLIENTS; i++){
+					if (this->clients[i].fd == -1){
+						this->clients[i].fd = clientSocket;
+						this->clients[i].events = POLLIN;
+						logFile << "Client successfully connected ^_^ <3" << std::endl;
+						this->isRunning = false;
+					}
+				}
+		}
+	}
+	logFile.close();
+	errorLogFile.close();
+}
 
 const char	*Server::InvalidPortNumberException::what() const throw(){
-	return ("Invalid Port. Port must be between 0 and 65535");
-}
-
-const char	*Server::PasswordCannotBeEmptyException::what() const throw(){
-	return ("The password cannot be empty");
-}
-
-const char	*Server::FailedToInitServerSocketException::what() const throw(){
-	return ("Failed to initalize the server socket");
-}
-
-const char	*Server::FailedToBindServerSocketException::what() const throw(){
-	return ("Failed to bind the socket to the port");
-}
-
-const char	*Server::FailedToInitPollException::what() const throw(){
-	return ("Failed to initalize the poll");
-}
-
-const char	*Server::FailedToListenException::what() const throw(){
-	return ("The server has failed to listen to sockets");
+	return (INVALID_PORT.c_str());
 }
 
 const char	*Server::ReservedPortException::what() const throw(){
-	return ("Ports between 0 and 1023 are system reserved.");
+	return (RESERVED_PORT.c_str());
+}
+
+
+const char	*Server::PasswordCannotBeEmptyException::what() const throw(){
+	return (EMPTY_PASSWORD.c_str());
+}
+
+const char	*Server::FailedToInitServerSocketException::what() const throw(){
+	return (SOCKET_INIT_FAIL.c_str());
+}
+
+const char	*Server::FailedToBindServerSocketException::what() const throw(){
+	return (SOCKET_BIND_FAIL.c_str());
+}
+
+const char	*Server::FailedToListenException::what() const throw(){
+	return (SOCKET_LISTEN_FAIL.c_str());
 }
 
 const char	*Server::FailedToInitalizePollFd::what() const throw(){
-	return ("The server failed to allocate memorey for pollfd.");
+	return (POLLFD_INIT_FAIL.c_str());
+}
+
+const char	*Server::FailedToMakeTheSocketNonBlockingException::what() const throw(){
+	return (SOCKET_NONBLOCKING_FAIL.c_str());
+}
+
+const char	*Server::FailedToSetSocketOptionsException::what() const throw() {
+	return (SOCKET_OPTIONS_FAIL.c_str());
 }
