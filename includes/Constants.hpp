@@ -6,7 +6,7 @@
 /*   By: hamalmar <hamalmar@student.42abudhabi.a    +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2025/10/01 16:38:26 by hamalmar          #+#    #+#             */
-/*   Updated: 2025/10/08 23:12:02 by hamalmar         ###   ########.fr       */
+/*   Updated: 2025/10/10 19:55:19 by hamalmar         ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
@@ -17,16 +17,20 @@
 
 	//Socket related constants
 	const std::string SERVER_IP = std::string("127.0.0.1");
-	const int NUMBER_OF_CLIENTS = SOMAXCONN;
+	const int NUMBER_OF_CLIENTS = 256;
 	const int MS_TIMEOUT = 250;
 	const int RESERVED_PORTS = IPPORT_RESERVED;
 	const int MAX_PORTS = 65535;
-
+	const int BUFFER_SIZE = 1024;
+	
 	//Server messages constants
 	const std::string INITALIZAE_SERVER = std::string("\033[1;33mAttempting to Initalize the Server\033[0m"); 
 	const std::string SERVER_INITALIZED = std::string("\033[1;32mServer has been initalized successfully!\033[0m");
 	const std::string SERVER_START_AND_ACCEPT = std::string("\033[1;33mAttempting to start the server and accept connections\033[0m");
 	const std::string SERVER_GOODBYE = std::string("\033[1;32mThank you for using HAI Server!\033[0m"); 
+
+	//Client messages constants
+	const std::string CLIENT_CONNECTED = std::string("Welcome to HAI Server!");
 
 	//Exception messages
 	const std::string INVALID_PORT = std::string("Invalid Port. Port must be between 0 and 65535");

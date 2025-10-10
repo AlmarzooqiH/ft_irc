@@ -6,7 +6,7 @@
 /*   By: hamalmar <hamalmar@student.42abudhabi.a    +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2025/10/01 17:04:26 by hamalmar          #+#    #+#             */
-/*   Updated: 2025/10/08 22:52:29 by hamalmar         ###   ########.fr       */
+/*   Updated: 2025/10/10 16:50:46 by hamalmar         ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
@@ -20,7 +20,9 @@
 class Server{
 
 	private:
+	//This will hold the port number that the user choses.
 		int port;
+
 		/**
 			* @brief sockaddr_in is used to describe the Server Address.
 			* It has the following fields:
@@ -35,10 +37,14 @@ class Server{
 			* @author Hamad
 		*/
 		sockaddr_in serverAddress;
+
 		//This will hold the server socket file descriptor.
 		int	serverSocket;
-		//This will hold the file descriptors that contains events by the poll().
+
+		//This will hold the number of events by the poll().
+
 		int	pollManager;
+
 		//This will hold the server password.
 		std::string password;
 

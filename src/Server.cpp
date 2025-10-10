@@ -6,7 +6,7 @@
 /*   By: hamalmar <hamalmar@student.42abudhabi.a    +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2025/10/01 23:00:19 by hamalmar          #+#    #+#             */
-/*   Updated: 2025/10/08 23:50:05 by hamalmar         ###   ########.fr       */
+/*   Updated: 2025/10/10 20:27:09 by hamalmar         ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
@@ -66,9 +66,10 @@ Server::Server(int port, std::string& password){
 		(sockaddr *)&this->serverAddress,
 		sizeof(this->serverAddress)
 	);
-	if (bindResult < 0){
+	if (bindResult < 0)
 		throw (Server::FailedToBindServerSocketException());
-	}
+std::cout << "serverSocket = " << serverSocket << std::endl;
+
 	int listenResult = listen(this->serverSocket, NUMBER_OF_CLIENTS);
 	if (listenResult < 0)
 		throw (Server::FailedToListenException());
@@ -123,21 +124,47 @@ void	Server::start(void){
 	std::ofstream errorLogFile("serverError.log");
 	while (this->isRunning){
 		this->pollManager = poll(this->clients, NUMBER_OF_CLIENTS, MS_TIMEOUT);
-
-			if (this->clients[0].revents & POLLIN){
-				int clientSocket = accept(this->clients[0].fd, NULL, NULL);
-				if (clientSocket < 0){
-					errorLogFile << "Failed to accept client T-T </3" << std::endl;
+		if (this->pollManager < 0 ){
+			errorLogFile << "Something went wrong" << std::endl;
+			continue;
+		} else if (this->pollManager == 0){
+			errorLogFile << "Poll timeout" << std::endl;
+			errorLogFile.flush();
+			continue;
+		}
+		if (this->clients[0].revents & POLLIN){
+			int clientSocket = accept(this->clients[0].fd, NULL, NULL);
+			if (clientSocket < 0){
+				errorLogFile << "Failed to accept client T-T </3" << std::endl;
+				errorLogFile.flush();
+				continue ;
+			}
+			for (int i = 1; i < NUMBER_OF_CLIENTS; i++){
+				pollfd&	client = this->clients[i];
+				if (client.fd == -1){
+					client.fd = clientSocket;
+					client.events = POLLIN;
+					send(client.fd, CLIENT_CONNECTED.c_str(), CLIENT_CONNECTED.size(), MSG_DONTWAIT);
+					logFile << "Client(" << client.fd << ") has successfully connect to HAI SERVER ^_^ <3" << std::endl;
+					logFile.flush();
+					break ;
+				}
+			}
+		}
+		for (int i = 1; i < NUMBER_OF_CLIENTS; i++){
+			pollfd&	client = this->clients[i];
+			if ((client.fd >=0) && (client.revents & POLLIN)){
+				char	buffer[BUFFER_SIZE];
+				ssize_t	recievedBytes = recv(client.fd, buffer, BUFFER_SIZE, MSG_DONTWAIT);
+				if (recievedBytes < 0){
+					errorLogFile << "Failed to recieve data from client(" << client.fd << ")" << std::endl;
+					errorLogFile.flush();
 					continue ;
 				}
-				for (int i = 1; i < NUMBER_OF_CLIENTS; i++){
-					if (this->clients[i].fd == -1){
-						this->clients[i].fd = clientSocket;
-						this->clients[i].events = POLLIN;
-						logFile << "Client successfully connected ^_^ <3" << std::endl;
-						this->isRunning = false;
-					}
-				}
+				buffer[recievedBytes] = '\0';
+				logFile << "Recived the following message from client(" << client.fd << "): " << buffer << std::endl;
+				logFile.flush();
+			}
 		}
 	}
 	logFile.close();
