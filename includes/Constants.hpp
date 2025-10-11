@@ -6,7 +6,7 @@
 /*   By: hamalmar <hamalmar@student.42abudhabi.a    +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2025/10/01 16:38:26 by hamalmar          #+#    #+#             */
-/*   Updated: 2025/10/11 16:52:56 by hamalmar         ###   ########.fr       */
+/*   Updated: 2025/10/11 18:35:05 by hamalmar         ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
@@ -17,12 +17,13 @@
 
 	//Socket related constants
 	const std::string SERVER_IP("127.0.0.1");
+	const std::string SERVER_NAME("HAI");
 	const int NUMBER_OF_CLIENTS = 256;
 	const int MS_TIMEOUT = 250;
 	const int RESERVED_PORTS = IPPORT_RESERVED;
 	const int MAX_PORTS = 65535;
 	const int BUFFER_SIZE = 1024;
-	
+
 	//Server messages constants
 	const std::string INITALIZAE_SERVER("\033[1;33mAttempting to Initalize the Server\033[0m"); 
 	const std::string SERVER_INITALIZED("\033[1;32mServer has been initalized successfully!\033[0m");
@@ -48,16 +49,24 @@
 	
 	const std::string POLLFD_INIT_FAIL("The server failed to allocate memorey for pollfd.");
 
+	//Servre CAPBALITIES
+	const std::string SERVER_CABAILITY("CAP * LS :\r\n");
+
 	//Weechat constants
 	const std::string WEECHAT_PASS("PASS");
-	const std::string WEECHAT_CABAILITY("CAP LS");
+	const std::string WEECHAT_CABAILITY_LS("CAP LS");
+	const std::string WEECHAT_CABAILITY_REQ("CAP REQ");
+	const std::string WEECHAT_CABAILITY_END("CAP END");
 	const std::string WEECHAT_NICKNAME("NICK");
 	const std::string WEECHAT_USER("USER");
 
 	enum WEECHAT_HANDSHAKE{
 		PASSWORD = 1 << 0,
-		CABAILITY = 1 << 1,
-		NICKNAME = 1 << 2,
-		USER = 1 << 3,
+		INVALID_PASSWORD = 1 << 1,
+		CABAILITY_LS = 1 << 2,
+		CABAILITY_REQ = 1 << 3,
+		CABAILITY_END = 1 << 4,
+		NICKNAME = 1 << 5,
+		USER = 1 << 6,
 	};
 #endif
