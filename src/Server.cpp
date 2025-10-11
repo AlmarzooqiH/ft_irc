@@ -6,7 +6,7 @@
 /*   By: hamalmar <hamalmar@student.42abudhabi.a    +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2025/10/01 23:00:19 by hamalmar          #+#    #+#             */
-/*   Updated: 2025/10/11 16:56:51 by hamalmar         ###   ########.fr       */
+/*   Updated: 2025/10/11 20:30:24 by hamalmar         ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
@@ -68,7 +68,6 @@ Server::Server(int port, std::string& password){
 	);
 	if (bindResult < 0)
 		throw (Server::FailedToBindServerSocketException());
-std::cout << "serverSocket = " << serverSocket << std::endl;
 
 	int listenResult = listen(this->serverSocket, NUMBER_OF_CLIENTS);
 	if (listenResult < 0)
@@ -119,31 +118,72 @@ Server::~Server(){
 	}
 }
 
-static int checkHandshake(const std::string& handshake){
-	if (handshake.substr(0, 5) == WEECHAT_PASS) {return (PASSWORD);}
-	else if (handshake.substr(0, 6) == WEECHAT_CABAILITY) {return (CABAILITY);}
+int	Server::checkHandshake(const std::string& handshake){
+	if (handshake.substr(0, 4) == WEECHAT_PASS) {return (PASSWORD);}
+	else if (handshake.substr(0, 6) == WEECHAT_CABAILITY_LS) {return (CABAILITY_LS);}
+	else if (handshake.substr(0, 7) == WEECHAT_CABAILITY_REQ) {return (CABAILITY_REQ);}
+	else if (handshake.substr(0, 7) == WEECHAT_CABAILITY_END) {return (CABAILITY_END);}
 	else if (handshake.substr(0, 4) == WEECHAT_NICKNAME) {return (NICKNAME);}
 	else if (handshake.substr(0, 4) == WEECHAT_USER) {return (USER);}
 	return (-1);
 }
 
+std::string Server::constructHandshake(int handshakeFlag){
+
+	if (handshakeFlag & CABAILITY_LS) {return (std::string(":" + SERVER_NAME + " " + SERVER_CABAILITY));}
+	else if (handshakeFlag & INVALID_PASSWORD) {return (std::string(":" + SERVER_NAME + " " + "464 * :Password incorrect\r\n"));}
+	return (std::string(""));
+}
+
 void	Server::performHandshake(pollfd& client, const std::string& handshake){
 	int handshakeFlags = checkHandshake(handshake);
+	std::string acknowledgementHandshake;
+
 	if (handshakeFlags < 0){
 			send(client.fd, CLIENT_SOMETHING_WENT_WRONG.c_str(), CLIENT_SOMETHING_WENT_WRONG.length(), MSG_DONTWAIT);
+			this->clientMap.erase(client.fd);
 			close(client.fd);
 			client.fd = -1;
 			return ;
+	}
+	std::cout << "Handshake flag: " << handshakeFlags << std::endl;
+	if (handshakeFlags & CABAILITY_END)
+		return ;
+	if (handshakeFlags & CABAILITY_LS){
+		acknowledgementHandshake = constructHandshake(handshakeFlags);
+		if (acknowledgementHandshake.empty())
+			return ;
+		send(client.fd, acknowledgementHandshake.c_str(), acknowledgementHandshake.length(), MSG_DONTWAIT);
 	}
 	if (handshakeFlags & PASSWORD){
 		std::string password = handshake.substr(5);
 		password.erase(password.find_last_not_of("\r\n") + 1);
 		if (password != this->password){
-			send(client.fd, CLIENT_INVALID_PASSWORD.c_str(), CLIENT_INVALID_PASSWORD.length(), MSG_DONTWAIT);
+			handshakeFlags = INVALID_PASSWORD;
+			acknowledgementHandshake = constructHandshake(handshakeFlags);
+			if (!acknowledgementHandshake.empty())
+				send(client.fd, acknowledgementHandshake.c_str(), acknowledgementHandshake.length(), MSG_DONTWAIT);
+			this->clientMap.erase(client.fd);
+			close(client.fd);
 			client.fd = -1;
 			return ;
 		}
+	} else if (handshakeFlags & NICKNAME){
+		std::cout << "NIGGERS" << std::endl;
+		std::string nickname = handshake.substr(5);
+		nickname.erase(nickname.find_last_not_of("\r\n") + 1);
+		this->clientMap.at(client.fd).setNickname(nickname);
+		std::cout << "client nickname is: " << this->clientMap.at(client.fd).getNickname() << std::endl;
 	}
+}
+
+std::string	Server::recieveData(pollfd& client){
+	char	buffer[BUFFER_SIZE];
+	ssize_t	recievedBytes = recv(client.fd, buffer, BUFFER_SIZE, MSG_DONTWAIT);
+	if (recievedBytes < 0)
+		return (std::string(""));
+	buffer[recievedBytes] = '\0';
+	return (std::string(buffer));
 }
 
 void	Server::start(void){
@@ -171,8 +211,8 @@ void	Server::start(void){
 				if (client.fd == -1){
 					client.fd = clientSocket;
 					client.events = POLLIN;
-					send(client.fd, CLIENT_CONNECTED.c_str(), CLIENT_CONNECTED.size(), MSG_DONTWAIT);
-					logFile << "Client(" << client.fd << ") has successfully connect to HAI SERVER ^_^ <3" << std::endl;
+					this->clientMap[client.fd] = Client();
+					this->clientBuffer[client.fd] = std::string("");
 					logFile.flush();
 					break ;
 				}
@@ -181,16 +221,21 @@ void	Server::start(void){
 		for (int i = 1; i < NUMBER_OF_CLIENTS; i++){
 			pollfd&	client = this->clients[i];
 			if ((client.fd >=0) && (client.revents & POLLIN)){
-				char	buffer[BUFFER_SIZE];
-				ssize_t	recievedBytes = recv(client.fd, buffer, BUFFER_SIZE, MSG_DONTWAIT);
-				if (recievedBytes < 0){
+				std::string buffer = recieveData(client);
+				if (buffer.empty()){
 					errorLogFile << "Failed to recieve data from client(" << client.fd << ")" << std::endl;
 					errorLogFile.flush();
-					continue ;
+					continue;
 				}
-				buffer[recievedBytes] = '\0';
-				std::string strBuffer(buffer);
-				performHandshake(client, buffer);
+				std::string& clientBuffer = this->clientBuffer[client.fd];
+				clientBuffer += buffer;
+				size_t endPosition = clientBuffer.find("\r\n");
+				while (endPosition != std::string::npos){
+					std::string handshake = clientBuffer.substr(0, endPosition);
+					performHandshake(client, handshake);
+					clientBuffer.erase(0, endPosition + 2);
+					endPosition = clientBuffer.find("\r\n");
+				}
 				logFile << buffer << std::endl;
 				logFile.flush();
 			}
