@@ -6,7 +6,7 @@
 /*   By: hamalmar <hamalmar@student.42abudhabi.a    +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2025/10/01 17:04:26 by hamalmar          #+#    #+#             */
-/*   Updated: 2025/10/10 16:50:46 by hamalmar         ###   ########.fr       */
+/*   Updated: 2025/10/11 15:32:08 by hamalmar         ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
@@ -72,6 +72,7 @@ class Server{
 		Server();
 		Server(const Server& right);
 		Server& operator=(const Server&  right);
+		void	performHandshake(pollfd& client, const std::string& handshake);
 
 	public:
 		~Server();

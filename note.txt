@@ -1,0 +1,12 @@
+PASS [Password]
+
+CAP LS 302
+
+NICK hamad
+
+USER hamad 0 * :hamad
+
+This is what i got as soon as i connected from Weechat client to HAI server.
+We  will use this data and other data to create the server!
+
+

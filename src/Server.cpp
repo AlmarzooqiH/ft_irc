@@ -6,7 +6,7 @@
 /*   By: hamalmar <hamalmar@student.42abudhabi.a    +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2025/10/01 23:00:19 by hamalmar          #+#    #+#             */
-/*   Updated: 2025/10/10 20:27:09 by hamalmar         ###   ########.fr       */
+/*   Updated: 2025/10/11 16:56:51 by hamalmar         ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
@@ -119,6 +119,33 @@ Server::~Server(){
 	}
 }
 
+static int checkHandshake(const std::string& handshake){
+	if (handshake.substr(0, 5) == WEECHAT_PASS) {return (PASSWORD);}
+	else if (handshake.substr(0, 6) == WEECHAT_CABAILITY) {return (CABAILITY);}
+	else if (handshake.substr(0, 4) == WEECHAT_NICKNAME) {return (NICKNAME);}
+	else if (handshake.substr(0, 4) == WEECHAT_USER) {return (USER);}
+	return (-1);
+}
+
+void	Server::performHandshake(pollfd& client, const std::string& handshake){
+	int handshakeFlags = checkHandshake(handshake);
+	if (handshakeFlags < 0){
+			send(client.fd, CLIENT_SOMETHING_WENT_WRONG.c_str(), CLIENT_SOMETHING_WENT_WRONG.length(), MSG_DONTWAIT);
+			close(client.fd);
+			client.fd = -1;
+			return ;
+	}
+	if (handshakeFlags & PASSWORD){
+		std::string password = handshake.substr(5);
+		password.erase(password.find_last_not_of("\r\n") + 1);
+		if (password != this->password){
+			send(client.fd, CLIENT_INVALID_PASSWORD.c_str(), CLIENT_INVALID_PASSWORD.length(), MSG_DONTWAIT);
+			client.fd = -1;
+			return ;
+		}
+	}
+}
+
 void	Server::start(void){
 	std::ofstream logFile("server.log");
 	std::ofstream errorLogFile("serverError.log");
@@ -162,7 +189,9 @@ void	Server::start(void){
 					continue ;
 				}
 				buffer[recievedBytes] = '\0';
-				logFile << "Recived the following message from client(" << client.fd << "): " << buffer << std::endl;
+				std::string strBuffer(buffer);
+				performHandshake(client, buffer);
+				logFile << buffer << std::endl;
 				logFile.flush();
 			}
 		}
