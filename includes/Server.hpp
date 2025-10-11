@@ -6,7 +6,7 @@
 /*   By: hamalmar <hamalmar@student.42abudhabi.a    +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2025/10/01 17:04:26 by hamalmar          #+#    #+#             */
-/*   Updated: 2025/10/11 15:32:08 by hamalmar         ###   ########.fr       */
+/*   Updated: 2025/10/11 20:17:04 by hamalmar         ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
@@ -16,6 +16,7 @@
 # include "Constants.hpp"
 # include "SocketHeaders.hpp"
 # include "UtilityHeaders.hpp"
+# include "Client.hpp"
 
 class Server{
 
@@ -66,13 +67,23 @@ class Server{
 		 */
 		pollfd *clients;
 
+		//This map will be used to store the client object relative to his file descriptor.
+		std::map<int, Client> clientMap;
+
+		//This will hold the buffer of the client when we will be using recv.
+		std::map<int, std::string> clientBuffer;
+
 		//This will be used for the event loop.
 		bool isRunning;
+
 
 		Server();
 		Server(const Server& right);
 		Server& operator=(const Server&  right);
 		void	performHandshake(pollfd& client, const std::string& handshake);
+		int checkHandshake(const std::string& handshake);
+		std::string constructHandshake(int handshakeFlag);
+		std::string	recieveData(pollfd& client);
 
 	public:
 		~Server();
