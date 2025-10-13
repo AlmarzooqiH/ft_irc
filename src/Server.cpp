@@ -6,7 +6,7 @@
 /*   By: hamalmar <hamalmar@student.42abudhabi.a    +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2025/10/01 23:00:19 by hamalmar          #+#    #+#             */
-/*   Updated: 2025/10/11 20:30:24 by hamalmar         ###   ########.fr       */
+/*   Updated: 2025/10/12 01:28:39 by hamalmar         ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
@@ -129,10 +129,20 @@ int	Server::checkHandshake(const std::string& handshake){
 }
 
 std::string Server::constructHandshake(int handshakeFlag){
-
-	if (handshakeFlag & CABAILITY_LS) {return (std::string(":" + SERVER_NAME + " " + SERVER_CABAILITY));}
-	else if (handshakeFlag & INVALID_PASSWORD) {return (std::string(":" + SERVER_NAME + " " + "464 * :Password incorrect\r\n"));}
-	return (std::string(""));
+	std::string handshake("");
+	if (handshakeFlag & CABAILITY_LS) {
+		handshake += ":";
+		handshake += SERVER_NAME;
+		handshake += " ";
+		handshake += SERVER_CABAILITY;
+	}
+	else if (handshakeFlag & INVALID_PASSWORD) {
+		handshake += ":";
+		handshake += SERVER_NAME;
+		handshake += " ";
+		handshake += "464 * :Password incorrect\r\n";
+	}
+	return (handshake);
 }
 
 void	Server::performHandshake(pollfd& client, const std::string& handshake){
@@ -146,7 +156,6 @@ void	Server::performHandshake(pollfd& client, const std::string& handshake){
 			client.fd = -1;
 			return ;
 	}
-	std::cout << "Handshake flag: " << handshakeFlags << std::endl;
 	if (handshakeFlags & CABAILITY_END)
 		return ;
 	if (handshakeFlags & CABAILITY_LS){
@@ -169,11 +178,9 @@ void	Server::performHandshake(pollfd& client, const std::string& handshake){
 			return ;
 		}
 	} else if (handshakeFlags & NICKNAME){
-		std::cout << "NIGGERS" << std::endl;
 		std::string nickname = handshake.substr(5);
 		nickname.erase(nickname.find_last_not_of("\r\n") + 1);
 		this->clientMap.at(client.fd).setNickname(nickname);
-		std::cout << "client nickname is: " << this->clientMap.at(client.fd).getNickname() << std::endl;
 	}
 }
 
@@ -196,14 +203,12 @@ void	Server::start(void){
 			continue;
 		} else if (this->pollManager == 0){
 			errorLogFile << "Poll timeout" << std::endl;
-			errorLogFile.flush();
 			continue;
 		}
 		if (this->clients[0].revents & POLLIN){
 			int clientSocket = accept(this->clients[0].fd, NULL, NULL);
 			if (clientSocket < 0){
 				errorLogFile << "Failed to accept client T-T </3" << std::endl;
-				errorLogFile.flush();
 				continue ;
 			}
 			for (int i = 1; i < NUMBER_OF_CLIENTS; i++){
@@ -213,7 +218,6 @@ void	Server::start(void){
 					client.events = POLLIN;
 					this->clientMap[client.fd] = Client();
 					this->clientBuffer[client.fd] = std::string("");
-					logFile.flush();
 					break ;
 				}
 			}
@@ -224,7 +228,6 @@ void	Server::start(void){
 				std::string buffer = recieveData(client);
 				if (buffer.empty()){
 					errorLogFile << "Failed to recieve data from client(" << client.fd << ")" << std::endl;
-					errorLogFile.flush();
 					continue;
 				}
 				std::string& clientBuffer = this->clientBuffer[client.fd];
@@ -237,9 +240,10 @@ void	Server::start(void){
 					endPosition = clientBuffer.find("\r\n");
 				}
 				logFile << buffer << std::endl;
-				logFile.flush();
 			}
 		}
+		logFile.flush();
+		errorLogFile.flush();
 	}
 	logFile.close();
 	errorLogFile.close();
