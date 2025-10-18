@@ -21,7 +21,7 @@ int main(int ac, char **av){
         /**
          * Why HAI?
          * (H)amad
-         * (Abdullah)
+         * (A)bdullah
          * (I)smail
          * -Hamad
          */

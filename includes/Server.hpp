@@ -6,7 +6,7 @@
 /*   By: hamalmar <hamalmar@student.42abudhabi.a    +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2025/10/01 17:04:26 by hamalmar          #+#    #+#             */
-/*   Updated: 2025/10/11 20:17:04 by hamalmar         ###   ########.fr       */
+/*   Updated: 2025/10/17 18:58:16 by hamalmar         ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
@@ -76,19 +76,29 @@ class Server{
 		//This will be used for the event loop.
 		bool isRunning;
 
+		/*
+			This will hold the number of clients that the server will hold.
+			Initally it will hold NUMBER_OF_CLIENTS that is defined in the
+			constants header file.
+		*/
+		unsigned int nClients;
+		
+		std::ofstream logFile;
 
 		Server();
 		Server(const Server& right);
 		Server& operator=(const Server&  right);
 		void	performHandshake(pollfd& client, const std::string& handshake);
-		int checkHandshake(const std::string& handshake);
-		std::string constructHandshake(int handshakeFlag);
+		int	checkHandshake(const std::string& handshake);
+		std::string constructHandshake(pollfd& client, int handshakeFlag);
 		std::string	recieveData(pollfd& client);
+		void	closeClientConnection(pollfd& client);
 
 	public:
 		~Server();
 		Server(int port, std::string& password);
 		void	start(void);
+
 		class InvalidPortNumberException: public std::exception{
 			public:
 				const char	*what() const throw();

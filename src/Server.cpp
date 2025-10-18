@@ -6,7 +6,7 @@
 /*   By: hamalmar <hamalmar@student.42abudhabi.a    +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2025/10/01 23:00:19 by hamalmar          #+#    #+#             */
-/*   Updated: 2025/10/12 01:28:39 by hamalmar         ###   ########.fr       */
+/*   Updated: 2025/10/18 16:24:06 by hamalmar         ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
@@ -18,6 +18,7 @@ Server::Server(const Server& right){
 	this->serverSocket = right.serverSocket;
 	this->pollManager = right.pollManager;
 	this->serverAddress = right.serverAddress;
+	this->nClients = right.nClients;
 }
 
 Server& Server::operator=(const Server& right){
@@ -26,6 +27,7 @@ Server& Server::operator=(const Server& right){
 		this->serverSocket = right.serverSocket;
 		this->pollManager = right.pollManager;
 		this->serverAddress = right.serverAddress;
+		this->nClients = right.nClients;
 	}
 	return (*this);
 }
@@ -39,6 +41,7 @@ Server::Server(int port, std::string& password){
 		throw (Server::PasswordCannotBeEmptyException());
 	this->port = port;
 	this->password = std::string(password);
+	this->nClients = NUMBER_OF_CLIENTS;
 	/*
 		AF_INET is just to specify that we are working with IPv4
 		SOCK_STREAM provides 2 way communication.
@@ -69,7 +72,7 @@ Server::Server(int port, std::string& password){
 	if (bindResult < 0)
 		throw (Server::FailedToBindServerSocketException());
 
-	int listenResult = listen(this->serverSocket, NUMBER_OF_CLIENTS);
+	int listenResult = listen(this->serverSocket, this->nClients);
 	if (listenResult < 0)
 		throw (Server::FailedToListenException());
 	/*
@@ -81,8 +84,8 @@ Server::Server(int port, std::string& password){
 	if (fcntlResult < 0)
 		throw (Server::FailedToMakeTheSocketNonBlockingException());
 	try {
-		this->clients = new pollfd[NUMBER_OF_CLIENTS];
-		for (unsigned int i = 0; i < NUMBER_OF_CLIENTS; i++){
+		this->clients = new pollfd[this->nClients];
+		for (unsigned int i = 0; i < this->nClients; i++){
 			this->clients[i].fd = -1;
 			this->clients[i].events = 0;
 			this->clients[i].revents = 0;
@@ -94,9 +97,20 @@ Server::Server(int port, std::string& password){
 		throw (Server::FailedToInitalizePollFd());
 	}
 	this->isRunning = true;
+	this->logFile.open("serverLog.log", std::ios::out | std::ios::trunc);
+}
+
+void	Server::closeClientConnection(pollfd& client){
+	if (client.fd >= 0){
+		close(client.fd);
+	}
+	client.fd = -1;
+	client.events = 0;
+	client.revents = 0;
 }
 
 Server::~Server(){
+	logFile.close();
 	this->isRunning = false;
 	this->port = -1;
 	if (this->serverSocket >= 0){
@@ -113,9 +127,12 @@ Server::~Server(){
 	}
 
 	if (this->clients){
+		for (unsigned int i = 0; i < this->nClients; i++)
+			closeClientConnection(this->clients[i]);
 		delete[] (this->clients);
 		this->clients = NULL;
 	}
+	this->nClients = 0;
 }
 
 int	Server::checkHandshake(const std::string& handshake){
@@ -128,38 +145,53 @@ int	Server::checkHandshake(const std::string& handshake){
 	return (-1);
 }
 
-std::string Server::constructHandshake(int handshakeFlag){
-	std::string handshake("");
+std::string Server::constructHandshake(pollfd& client, int handshakeFlag){
+	(void)client;
+	std::ostringstream handshake;
 	if (handshakeFlag & CABAILITY_LS) {
-		handshake += ":";
-		handshake += SERVER_NAME;
-		handshake += " ";
-		handshake += SERVER_CABAILITY;
+		handshake << ":";
+		handshake << SERVER_NAME;
+		handshake << " ";
+		handshake << SERVER_CABAILITY;
 	}
 	else if (handshakeFlag & INVALID_PASSWORD) {
-		handshake += ":";
-		handshake += SERVER_NAME;
-		handshake += " ";
-		handshake += "464 * :Password incorrect\r\n";
+		handshake << ":";
+		handshake << SERVER_NAME;
+		handshake << " ";
+		handshake << ERR_PASSWDMISMATCH;
+		handshake << " * :Password incorrect\r\n";
+	} else if (handshakeFlag & WELCOME_USER){
+		handshake << ":";
+		handshake << SERVER_NAME;
+		handshake << " ";
+		handshake << RPL_WELCOME;
+		handshake << " :";
+		handshake << CLIENT_CONNECTED;
+		handshake << "\r\n"
 	}
-	return (handshake);
+	return (handshake.str());
 }
 
 void	Server::performHandshake(pollfd& client, const std::string& handshake){
 	int handshakeFlags = checkHandshake(handshake);
+	Client& clientObj = this->clientMap.at(client.fd);
 	std::string acknowledgementHandshake;
 
 	if (handshakeFlags < 0){
 			send(client.fd, CLIENT_SOMETHING_WENT_WRONG.c_str(), CLIENT_SOMETHING_WENT_WRONG.length(), MSG_DONTWAIT);
 			this->clientMap.erase(client.fd);
-			close(client.fd);
-			client.fd = -1;
+			closeClientConnection(client);
 			return ;
 	}
-	if (handshakeFlags & CABAILITY_END)
+	if (handshakeFlags & CABAILITY_END){
+		handshakeFlags = WELCOME_USER;
+		acknowledgementHandshake = constructHandshake(client, handshakeFlags);
+		send(client.fd, acknowledgementHandshake.c_str(), acknowledgementHandshake.length(), MSG_DONTWAIT);
+		
 		return ;
+	}
 	if (handshakeFlags & CABAILITY_LS){
-		acknowledgementHandshake = constructHandshake(handshakeFlags);
+		acknowledgementHandshake = constructHandshake(client, handshakeFlags);
 		if (acknowledgementHandshake.empty())
 			return ;
 		send(client.fd, acknowledgementHandshake.c_str(), acknowledgementHandshake.length(), MSG_DONTWAIT);
@@ -169,18 +201,22 @@ void	Server::performHandshake(pollfd& client, const std::string& handshake){
 		password.erase(password.find_last_not_of("\r\n") + 1);
 		if (password != this->password){
 			handshakeFlags = INVALID_PASSWORD;
-			acknowledgementHandshake = constructHandshake(handshakeFlags);
-			if (!acknowledgementHandshake.empty())
-				send(client.fd, acknowledgementHandshake.c_str(), acknowledgementHandshake.length(), MSG_DONTWAIT);
+			acknowledgementHandshake = constructHandshake(client, handshakeFlags);
+			send(client.fd, acknowledgementHandshake.c_str(), acknowledgementHandshake.length(), MSG_DONTWAIT);
 			this->clientMap.erase(client.fd);
-			close(client.fd);
-			client.fd = -1;
+			closeClientConnection(client);
 			return ;
 		}
 	} else if (handshakeFlags & NICKNAME){
 		std::string nickname = handshake.substr(5);
 		nickname.erase(nickname.find_last_not_of("\r\n") + 1);
-		this->clientMap.at(client.fd).setNickname(nickname);
+		clientObj.setNickname(nickname);
+	} else if (handshakeFlags & USER){
+		size_t colonPos = handshake.find(':');
+		std::string username = handshake.substr(colonPos + 1);
+		username.erase(username.find_last_not_of("\r\n") + 1);
+		username.erase(username.find_last_not_of("\r\n") + 1);
+		clientObj.setUsername(username);
 	}
 }
 
@@ -194,24 +230,17 @@ std::string	Server::recieveData(pollfd& client){
 }
 
 void	Server::start(void){
-	std::ofstream logFile("server.log");
-	std::ofstream errorLogFile("serverError.log");
 	while (this->isRunning){
 		this->pollManager = poll(this->clients, NUMBER_OF_CLIENTS, MS_TIMEOUT);
-		if (this->pollManager < 0 ){
-			errorLogFile << "Something went wrong" << std::endl;
-			continue;
-		} else if (this->pollManager == 0){
-			errorLogFile << "Poll timeout" << std::endl;
+		this->logFile.flush();
+		if (this->pollManager <= 0){
 			continue;
 		}
 		if (this->clients[0].revents & POLLIN){
 			int clientSocket = accept(this->clients[0].fd, NULL, NULL);
-			if (clientSocket < 0){
-				errorLogFile << "Failed to accept client T-T </3" << std::endl;
+			if (clientSocket < 0)
 				continue ;
-			}
-			for (int i = 1; i < NUMBER_OF_CLIENTS; i++){
+			for (unsigned int i = 1; i < this->nClients; i++){
 				pollfd&	client = this->clients[i];
 				if (client.fd == -1){
 					client.fd = clientSocket;
@@ -222,31 +251,25 @@ void	Server::start(void){
 				}
 			}
 		}
-		for (int i = 1; i < NUMBER_OF_CLIENTS; i++){
+		for (unsigned int i = 1; i < this->nClients; i++){
 			pollfd&	client = this->clients[i];
 			if ((client.fd >=0) && (client.revents & POLLIN)){
 				std::string buffer = recieveData(client);
-				if (buffer.empty()){
-					errorLogFile << "Failed to recieve data from client(" << client.fd << ")" << std::endl;
+				if (buffer.empty())
 					continue;
-				}
 				std::string& clientBuffer = this->clientBuffer[client.fd];
 				clientBuffer += buffer;
 				size_t endPosition = clientBuffer.find("\r\n");
 				while (endPosition != std::string::npos){
 					std::string handshake = clientBuffer.substr(0, endPosition);
 					performHandshake(client, handshake);
+					this->logFile << clientBuffer;
 					clientBuffer.erase(0, endPosition + 2);
 					endPosition = clientBuffer.find("\r\n");
 				}
-				logFile << buffer << std::endl;
 			}
 		}
-		logFile.flush();
-		errorLogFile.flush();
 	}
-	logFile.close();
-	errorLogFile.close();
 }
 
 const char	*Server::InvalidPortNumberException::what() const throw(){

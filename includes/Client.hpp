@@ -18,7 +18,8 @@ class Client{
 	private:
 		std::string username;
 		std::string nickname;
-		
+		std::string role;
+
 		public:
 		Client();
 		Client(const Client& right);
@@ -26,10 +27,11 @@ class Client{
 		~Client();
 		std::string	getNickname(void) const;
 		std::string	getUsername(void) const;
-
+		std::string	getRole(void) const;
 		
 		void	setNickname(std::string &nNickname);
 		void	setUsername(std::string &nUsername);
+		void	setRole(std::string &nRole);
 
 };
 #endif

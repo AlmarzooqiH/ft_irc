@@ -6,7 +6,7 @@
 /*   By: hamalmar <hamalmar@student.42abudhabi.a    +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2025/10/01 16:38:26 by hamalmar          #+#    #+#             */
-/*   Updated: 2025/10/11 18:35:05 by hamalmar         ###   ########.fr       */
+/*   Updated: 2025/10/17 23:24:22 by hamalmar         ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
@@ -15,14 +15,23 @@
 	# include "SocketHeaders.hpp"
 	# include <string>
 
+	const float SERVER_VERSION = 1.0;
+
 	//Socket related constants
 	const std::string SERVER_IP("127.0.0.1");
 	const std::string SERVER_NAME("HAI");
-	const int NUMBER_OF_CLIENTS = 256;
+	const unsigned int NUMBER_OF_CLIENTS = 16;
 	const int MS_TIMEOUT = 250;
 	const int RESERVED_PORTS = IPPORT_RESERVED;
 	const int MAX_PORTS = 65535;
 	const int BUFFER_SIZE = 1024;
+
+	/**
+		If the user want to become an operator he will have
+		to enter this password when executing
+		/mode channel +o nickname
+	*/
+	const std::string OPERATOR_PASSWORD("hehe@1234");
 
 	//Server messages constants
 	const std::string INITALIZAE_SERVER("\033[1;33mAttempting to Initalize the Server\033[0m"); 
@@ -60,7 +69,7 @@
 	const std::string WEECHAT_NICKNAME("NICK");
 	const std::string WEECHAT_USER("USER");
 
-	enum WEECHAT_HANDSHAKE{
+	enum WEECHAT_HANDSHAKE {
 		PASSWORD = 1 << 0,
 		INVALID_PASSWORD = 1 << 1,
 		CABAILITY_LS = 1 << 2,
@@ -68,5 +77,21 @@
 		CABAILITY_END = 1 << 4,
 		NICKNAME = 1 << 5,
 		USER = 1 << 6,
+		WELCOME_USER = 1 << 7
+	};
+
+	/**
+		IRC protocol numeric replies (Status codes).
+		Those code can be found at
+		https://datatracker.ietf.org/doc/html/rfc2812#section-5
+		@note RPL_ Stands for Reply.
+		@author Hamad.
+	*/
+	enum STATUS_CODES {
+		RPL_WELCOME = 001, //Welcome message.
+		RPL_YOURHOST = 002, //Server introduction.
+		RPL_CREATED = 003, //Server creation date.
+		RPL_MYINFO = 004, //Server version.
+		ERR_PASSWDMISMATCH = 464 //Invalid password :P
 	};
 #endif
