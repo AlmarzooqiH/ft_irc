@@ -6,7 +6,7 @@
 /*   By: hamalmar <hamalmar@student.42abudhabi.a    +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2025/10/01 17:04:26 by hamalmar          #+#    #+#             */
-/*   Updated: 2025/10/17 18:58:16 by hamalmar         ###   ########.fr       */
+/*   Updated: 2025/10/21 15:45:18 by hamalmar         ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
@@ -81,7 +81,7 @@ class Server{
 			Initally it will hold NUMBER_OF_CLIENTS that is defined in the
 			constants header file.
 		*/
-		unsigned int nClients;
+		size_t	serverCapacity;
 		
 		std::ofstream logFile;
 
@@ -93,6 +93,7 @@ class Server{
 		std::string constructHandshake(pollfd& client, int handshakeFlag);
 		std::string	recieveData(pollfd& client);
 		void	closeClientConnection(pollfd& client);
+		void	rejectClient(int clientSocket);
 
 	public:
 		~Server();
@@ -100,11 +101,6 @@ class Server{
 		void	start(void);
 
 		class InvalidPortNumberException: public std::exception{
-			public:
-				const char	*what() const throw();
-		};
-
-		class PasswordCannotBeEmptyException: public std::exception{
 			public:
 				const char	*what() const throw();
 		};

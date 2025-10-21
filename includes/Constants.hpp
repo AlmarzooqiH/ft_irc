@@ -6,7 +6,7 @@
 /*   By: hamalmar <hamalmar@student.42abudhabi.a    +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2025/10/01 16:38:26 by hamalmar          #+#    #+#             */
-/*   Updated: 2025/10/17 23:24:22 by hamalmar         ###   ########.fr       */
+/*   Updated: 2025/10/21 15:43:16 by hamalmar         ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
@@ -20,11 +20,20 @@
 	//Socket related constants
 	const std::string SERVER_IP("127.0.0.1");
 	const std::string SERVER_NAME("HAI");
-	const unsigned int NUMBER_OF_CLIENTS = 16;
+	const unsigned int NUMBER_OF_CLIENTS = 1;
 	const int MS_TIMEOUT = 250;
 	const int RESERVED_PORTS = IPPORT_RESERVED;
 	const int MAX_PORTS = 65535;
 	const int BUFFER_SIZE = 1024;
+
+	/**
+		This is going to be using in the send() function since
+		the socket is already non blocking we dont want to send
+		the buffer with any special flags.
+
+		@author Hamad
+	*/
+	const int DEFAULT_FLAG_SEND = 0;
 
 	/**
 		If the user want to become an operator he will have

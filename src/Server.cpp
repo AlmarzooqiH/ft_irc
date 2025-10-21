@@ -6,7 +6,7 @@
 /*   By: hamalmar <hamalmar@student.42abudhabi.a    +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2025/10/01 23:00:19 by hamalmar          #+#    #+#             */
-/*   Updated: 2025/10/18 16:24:06 by hamalmar         ###   ########.fr       */
+/*   Updated: 2025/10/21 15:43:04 by hamalmar         ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
@@ -18,7 +18,7 @@ Server::Server(const Server& right){
 	this->serverSocket = right.serverSocket;
 	this->pollManager = right.pollManager;
 	this->serverAddress = right.serverAddress;
-	this->nClients = right.nClients;
+	this->serverCapacity = right.serverCapacity;
 }
 
 Server& Server::operator=(const Server& right){
@@ -27,7 +27,7 @@ Server& Server::operator=(const Server& right){
 		this->serverSocket = right.serverSocket;
 		this->pollManager = right.pollManager;
 		this->serverAddress = right.serverAddress;
-		this->nClients = right.nClients;
+		this->serverCapacity = right.serverCapacity;
 	}
 	return (*this);
 }
@@ -37,11 +37,11 @@ Server::Server(int port, std::string& password){
 		throw (Server::InvalidPortNumberException());
 	else if (port < RESERVED_PORTS)
 		throw (Server::ReservedPortException());
-	if (password.empty())
-		throw (Server::PasswordCannotBeEmptyException());
 	this->port = port;
 	this->password = std::string(password);
-	this->nClients = NUMBER_OF_CLIENTS;
+
+	//I added 1 becuase the server will be inside pollfd as well.
+	this->serverCapacity = NUMBER_OF_CLIENTS + 1;
 	/*
 		AF_INET is just to specify that we are working with IPv4
 		SOCK_STREAM provides 2 way communication.
@@ -72,20 +72,19 @@ Server::Server(int port, std::string& password){
 	if (bindResult < 0)
 		throw (Server::FailedToBindServerSocketException());
 
-	int listenResult = listen(this->serverSocket, this->nClients);
+	int listenResult = listen(this->serverSocket, this->serverCapacity);
 	if (listenResult < 0)
 		throw (Server::FailedToListenException());
 	/*
 		Added 0 at the end becuase it will tell the function when to stop the
 		varadic function.
 	*/	
-	int socketFlags = fcntl(this->serverSocket, F_GETFL, 0);
-	int fcntlResult = fcntl(this->serverSocket, F_SETFL, socketFlags | O_NONBLOCK);
+	int fcntlResult = fcntl(this->serverSocket, F_SETFL, O_NONBLOCK);
 	if (fcntlResult < 0)
 		throw (Server::FailedToMakeTheSocketNonBlockingException());
 	try {
-		this->clients = new pollfd[this->nClients];
-		for (unsigned int i = 0; i < this->nClients; i++){
+		this->clients = new pollfd[this->serverCapacity];
+		for (unsigned int i = 0; i < this->serverCapacity; i++){
 			this->clients[i].fd = -1;
 			this->clients[i].events = 0;
 			this->clients[i].revents = 0;
@@ -127,12 +126,12 @@ Server::~Server(){
 	}
 
 	if (this->clients){
-		for (unsigned int i = 0; i < this->nClients; i++)
+		for (unsigned int i = 0; i < this->serverCapacity; i++)
 			closeClientConnection(this->clients[i]);
 		delete[] (this->clients);
 		this->clients = NULL;
 	}
-	this->nClients = 0;
+	this->serverCapacity = 0;
 }
 
 int	Server::checkHandshake(const std::string& handshake){
@@ -167,7 +166,7 @@ std::string Server::constructHandshake(pollfd& client, int handshakeFlag){
 		handshake << RPL_WELCOME;
 		handshake << " :";
 		handshake << CLIENT_CONNECTED;
-		handshake << "\r\n"
+		handshake << "\r\n";
 	}
 	return (handshake.str());
 }
@@ -178,7 +177,7 @@ void	Server::performHandshake(pollfd& client, const std::string& handshake){
 	std::string acknowledgementHandshake;
 
 	if (handshakeFlags < 0){
-			send(client.fd, CLIENT_SOMETHING_WENT_WRONG.c_str(), CLIENT_SOMETHING_WENT_WRONG.length(), MSG_DONTWAIT);
+			send(client.fd, CLIENT_SOMETHING_WENT_WRONG.c_str(), CLIENT_SOMETHING_WENT_WRONG.length(), DEFAULT_FLAG_SEND);
 			this->clientMap.erase(client.fd);
 			closeClientConnection(client);
 			return ;
@@ -229,6 +228,10 @@ std::string	Server::recieveData(pollfd& client){
 	return (std::string(buffer));
 }
 
+void	Server::rejectClient(int clientSocket){
+	close(clientSocket);
+}
+
 void	Server::start(void){
 	while (this->isRunning){
 		this->pollManager = poll(this->clients, NUMBER_OF_CLIENTS, MS_TIMEOUT);
@@ -240,7 +243,11 @@ void	Server::start(void){
 			int clientSocket = accept(this->clients[0].fd, NULL, NULL);
 			if (clientSocket < 0)
 				continue ;
-			for (unsigned int i = 1; i < this->nClients; i++){
+			if (this->clientMap.size() == serverCapacity){
+				rejectClient(clientSocket);
+				continue ;
+			}
+			for (unsigned int i = 1; i < this->serverCapacity; i++){
 				pollfd&	client = this->clients[i];
 				if (client.fd == -1){
 					client.fd = clientSocket;
@@ -251,7 +258,7 @@ void	Server::start(void){
 				}
 			}
 		}
-		for (unsigned int i = 1; i < this->nClients; i++){
+		for (unsigned int i = 1; i < this->serverCapacity; i++){
 			pollfd&	client = this->clients[i];
 			if ((client.fd >=0) && (client.revents & POLLIN)){
 				std::string buffer = recieveData(client);
@@ -278,11 +285,6 @@ const char	*Server::InvalidPortNumberException::what() const throw(){
 
 const char	*Server::ReservedPortException::what() const throw(){
 	return (RESERVED_PORT.c_str());
-}
-
-
-const char	*Server::PasswordCannotBeEmptyException::what() const throw(){
-	return (EMPTY_PASSWORD.c_str());
 }
 
 const char	*Server::FailedToInitServerSocketException::what() const throw(){
