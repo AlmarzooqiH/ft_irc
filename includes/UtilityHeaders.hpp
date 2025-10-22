@@ -6,7 +6,7 @@
 /*   By: hamalmar <hamalmar@student.42abudhabi.a    +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2025/10/01 17:21:20 by hamalmar          #+#    #+#             */
-/*   Updated: 2025/10/16 16:54:29 by hamalmar         ###   ########.fr       */
+/*   Updated: 2025/10/22 15:19:52 by hamalmar         ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
@@ -29,4 +29,5 @@
 # include <map>
 # include <vector>
 # include <fstream>
+# include <iomanip>
 #endif
