@@ -19,6 +19,9 @@ class Client{
 		std::string username;
 		std::string nickname;
 		std::string role;
+		bool recvNick;
+		bool recvUser;
+		bool recvCab;
 
 		public:
 		Client();
@@ -28,10 +31,16 @@ class Client{
 		std::string	getNickname(void) const;
 		std::string	getUsername(void) const;
 		std::string	getRole(void) const;
+		bool	getRecvNick(void) const;
+		bool	getRecvUser(void) const;
+		bool	getRecvCab(void) const;
 		
 		void	setNickname(std::string &nNickname);
 		void	setUsername(std::string &nUsername);
 		void	setRole(std::string &nRole);
+		void	setRecvNick(bool n);
+		void	setRecvUser(bool n);
+		void	setRecvCab(bool n);
 
 };
 #endif
