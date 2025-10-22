@@ -6,7 +6,7 @@
 /*   By: hamalmar <hamalmar@student.42abudhabi.a    +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2025/10/01 17:04:26 by hamalmar          #+#    #+#             */
-/*   Updated: 2025/10/21 15:45:18 by hamalmar         ###   ########.fr       */
+/*   Updated: 2025/10/22 16:19:34 by hamalmar         ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
@@ -82,8 +82,6 @@ class Server{
 			constants header file.
 		*/
 		size_t	serverCapacity;
-		
-		std::ofstream logFile;
 
 		Server();
 		Server(const Server& right);
@@ -94,10 +92,11 @@ class Server{
 		std::string	recieveData(pollfd& client);
 		void	closeClientConnection(pollfd& client);
 		void	rejectClient(int clientSocket);
+		void	sendMessage(pollfd& client, std::string& message);
 
 	public:
 		~Server();
-		Server(int port, std::string& password);
+		Server(int port, const std::string& password);
 		void	start(void);
 
 		class InvalidPortNumberException: public std::exception{
