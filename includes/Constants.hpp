@@ -6,7 +6,7 @@
 /*   By: hamalmar <hamalmar@student.42abudhabi.a    +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2025/10/01 16:38:26 by hamalmar          #+#    #+#             */
-/*   Updated: 2025/10/21 15:43:16 by hamalmar         ###   ########.fr       */
+/*   Updated: 2025/10/22 16:21:21 by hamalmar         ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
@@ -20,11 +20,14 @@
 	//Socket related constants
 	const std::string SERVER_IP("127.0.0.1");
 	const std::string SERVER_NAME("HAI");
-	const unsigned int NUMBER_OF_CLIENTS = 1;
+	const unsigned int NUMBER_OF_CLIENTS = 16;
 	const int MS_TIMEOUT = 250;
 	const int RESERVED_PORTS = IPPORT_RESERVED;
 	const int MAX_PORTS = 65535;
 	const int BUFFER_SIZE = 1024;
+
+	//The CLDR is used to tell the client that this is the end of the message.
+	const std::string CLDR("\r\n");
 
 	/**
 		This is going to be using in the send() function since
@@ -48,10 +51,12 @@
 	const std::string SERVER_START_AND_ACCEPT("\033[1;33mAttempting to start the server and accept connections\033[0m");
 	const std::string SERVER_GOODBYE("\033[1;32mThank you for using HAI Server!\033[0m"); 
 
-	//Client messages constants
-	const std::string CLIENT_CONNECTED("Welcome to HAI Server!\n");
-	const std::string CLIENT_INVALID_PASSWORD("Password is invalid");
-	const std::string CLIENT_SOMETHING_WENT_WRONG("Something went wrong!");
+	//Messages that will be sent to the client.
+	const std::string MSG_WELCOME("Welcome to HAI Server!");
+	const std::string MSG_SERVER_CREATION("HAI was created today");
+	const std::string MSG_SERVER_FULL("Thank you for using HAI server.");
+	const std::string MSG_INVALID_PASSWORD("Password is invalid");
+	const std::string MSG_SOMETHING_WENT_WRONG("Something went wrong!");
 
 	//Exception messages
 	const std::string INVALID_PORT("Invalid Port. Port must be between 0 and 65535");
@@ -67,9 +72,6 @@
 	
 	const std::string POLLFD_INIT_FAIL("The server failed to allocate memorey for pollfd.");
 
-	//Servre CAPBALITIES
-	const std::string SERVER_CABAILITY("CAP * LS :\r\n");
-
 	//Weechat constants
 	const std::string WEECHAT_PASS("PASS");
 	const std::string WEECHAT_CABAILITY_LS("CAP LS");
@@ -77,6 +79,8 @@
 	const std::string WEECHAT_CABAILITY_END("CAP END");
 	const std::string WEECHAT_NICKNAME("NICK");
 	const std::string WEECHAT_USER("USER");
+	const std::string WEECHAT_QUIT("QUIT");
+	const std::string WEECHAT_LIST("LIST");
 
 	enum WEECHAT_HANDSHAKE {
 		PASSWORD = 1 << 0,
@@ -86,7 +90,9 @@
 		CABAILITY_END = 1 << 4,
 		NICKNAME = 1 << 5,
 		USER = 1 << 6,
-		WELCOME_USER = 1 << 7
+		WELCOME_USER = 1 << 7,
+		QUIT = 1 << 8,
+		LIST = 1 << 9
 	};
 
 	/**
