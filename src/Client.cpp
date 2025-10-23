@@ -52,9 +52,9 @@ bool	Client::getRecvNick(void) const {return (this->recvNick);}
 bool	Client::getRecvUser(void) const {return (this->recvUser);}
 bool	Client::getRecvCab(void) const {return (this->recvCab);}
 
-void	Client::setNickname(std::string &nNickname) {this->nickname = nNickname;}
-void	Client::setUsername(std::string &nUsername) {this->username = nUsername;}
-void	Client::setRole(std::string &nRole) {this->role = nRole;}
-void	Client::setRecvNick(bool n) {this->recvNick = n;}
-void	Client::setRecvUser(bool n) {this->recvUser = n;}
-void	Client::setRecvCab(bool n) {this->recvCab = n;}
+void	Client::setNickname(const std::string &nNickname) {this->nickname = nNickname;}
+void	Client::setUsername(const std::string &nUsername) {this->username = nUsername;}
+void	Client::setRole(const std::string &nRole) {this->role = nRole;}
+void	Client::setRecvNick(bool nRecvNick) {this->recvNick = nRecvNick;}
+void	Client::setRecvUser(bool nRecvUser) {this->recvUser = nRecvUser;}
+void	Client::setRecvCab(bool nRecvCab) {this->recvCab = nRecvCab;}

@@ -35,12 +35,12 @@ class Client{
 		bool	getRecvUser(void) const;
 		bool	getRecvCab(void) const;
 		
-		void	setNickname(std::string &nNickname);
-		void	setUsername(std::string &nUsername);
-		void	setRole(std::string &nRole);
-		void	setRecvNick(bool n);
-		void	setRecvUser(bool n);
-		void	setRecvCab(bool n);
+		void	setNickname(const std::string &nNickname);
+		void	setUsername(const std::string &nUsername);
+		void	setRole(const std::string &nRole);
+		void	setRecvNick(bool nRecvNick);
+		void	setRecvUser(bool nRecvUser);
+		void	setRecvCab(bool nRecvCab);
 
 };
 #endif

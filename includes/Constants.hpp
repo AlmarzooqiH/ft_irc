@@ -6,7 +6,7 @@
 /*   By: hamalmar <hamalmar@student.42abudhabi.a    +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2025/10/01 16:38:26 by hamalmar          #+#    #+#             */
-/*   Updated: 2025/10/22 16:21:21 by hamalmar         ###   ########.fr       */
+/*   Updated: 2025/10/23 11:02:36 by hamalmar         ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
@@ -57,6 +57,10 @@
 	const std::string MSG_SERVER_FULL("Thank you for using HAI server.");
 	const std::string MSG_INVALID_PASSWORD("Password is invalid");
 	const std::string MSG_SOMETHING_WENT_WRONG("Something went wrong!");
+	const std::string MSG_NICKNAME_TAKEN("Nickname is already in use");
+	//Client Roles
+	const std::string CLIENT_ROLE_REGULAR("Regular");
+	const std::string CLIENT_ROLE_OPERATOR("Operator");
 
 	//Exception messages
 	const std::string INVALID_PORT("Invalid Port. Port must be between 0 and 65535");
@@ -81,6 +85,9 @@
 	const std::string WEECHAT_USER("USER");
 	const std::string WEECHAT_QUIT("QUIT");
 	const std::string WEECHAT_LIST("LIST");
+	const std::string WEECHAT_PING("PING");
+	const std::string WEECHAT_PONG("PONG");
+	const std::string WEECHAT_CHANNEL_PREFIX("&#!+"); //According to the protocol manual
 
 	enum WEECHAT_HANDSHAKE {
 		PASSWORD = 1 << 0,
@@ -92,21 +99,54 @@
 		USER = 1 << 6,
 		WELCOME_USER = 1 << 7,
 		QUIT = 1 << 8,
-		LIST = 1 << 9
+		LIST = 1 << 9,
+		NICKNAME_TAKEN = 1 << 10,
+		PING = 1 << 11,
+		JOIN = 1 << 12
 	};
 
 	/**
-		IRC protocol numeric replies (Status codes).
-		Those code can be found at
-		https://datatracker.ietf.org/doc/html/rfc2812#section-5
-		@note RPL_ Stands for Reply.
-		@author Hamad.
+	 * IRC protocol numeric replies (Status codes).
+	 * Those code can be found at
+	 * https://datatracker.ietf.org/doc/html/rfc2812#section-5
+	 * @note RPL_ Stands for Reply.
+	 * @note The descriptions i got for each status code are from the
+	 * protocol manual. ^^^^^^^
+	 * @author Hamad.
 	*/
 	enum STATUS_CODES {
-		RPL_WELCOME = 001, //Welcome message.
-		RPL_YOURHOST = 002, //Server introduction.
-		RPL_CREATED = 003, //Server creation date.
-		RPL_MYINFO = 004, //Server version.
-		ERR_PASSWDMISMATCH = 464 //Invalid password :P
+		/**
+		 * The server sends Replies 001 to 004 to a user upon
+		 * successful registration.
+		 * RPL_WELCOME:   Welcome message.
+		 * RPL_YOURHOST:  Server introduction.
+		 * RPL_CREATED:   Server creation date.
+		 * RPL_MYINFO:    Server version.
+		*/
+		RPL_WELCOME = 001,
+		RPL_YOURHOST = 002,
+		RPL_CREATED = 003,
+		RPL_MYINFO = 004,
+
+		/**
+		 * ERR_NOSUCHSERVIC: Returned to a client which is attempting to send a SQUERY
+		 * to a service which does not exist
+
+		 * ERR_NOORIGIN: PING or PONG message missing the originator parameter
+		*/
+		ERR_NOSUCHSERVICE = 408,
+		ERR_NOORIGIN = 409,
+
+		/**
+		 * ERR_NICKNAMEINUSE: Returned when a NICK message is processed that results
+		 * in an attempt to change to a currently existing nickname.
+		*/
+		ERR_NICKNAMEINUSE = 433,
+
+		/**
+		 * Returned to indicate a failed attempt at registering a connection for 
+		 * which a password was required and was either not given or incorrect.
+		*/
+		ERR_PASSWDMISMATCH = 464
 	};
 #endif

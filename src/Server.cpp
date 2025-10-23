@@ -6,7 +6,7 @@
 /*   By: hamalmar <hamalmar@student.42abudhabi.a    +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2025/10/01 23:00:19 by hamalmar          #+#    #+#             */
-/*   Updated: 2025/10/22 16:26:58 by hamalmar         ###   ########.fr       */
+/*   Updated: 2025/10/23 13:31:57 by hamalmar         ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
@@ -75,10 +75,6 @@ Server::Server(int port, const std::string& password){
 	int listenResult = listen(this->serverSocket, this->serverCapacity);
 	if (listenResult < 0)
 		throw (Server::FailedToListenException());
-	/*
-		Added 0 at the end becuase it will tell the function when to stop the
-		varadic function.
-	*/
 
 	int fcntlResult = fcntl(this->serverSocket, F_SETFL, O_NONBLOCK);
 	if (fcntlResult < 0)
@@ -162,6 +158,7 @@ int	Server::checkHandshake(const std::string& handshake){
 	else if (handshake.substr(0, 4) == WEECHAT_USER) {return (USER);}
 	else if (handshake.substr(0, 4) == WEECHAT_QUIT) {return (QUIT);}
 	else if (handshake.substr(0, 4) == WEECHAT_LIST) {return (LIST);}
+	else if (handshake.substr(0, 4) == WEECHAT_PING) {return (PING);}
 	return (-1);
 }
 
@@ -205,6 +202,12 @@ std::string Server::constructHandshake(pollfd& client, int handshakeFlag){
 		<< std::setw(3) << std::setfill('0') << RPL_MYINFO
 		<< " " << clientObj.getNickname() << " :" << SERVER_NAME << " "
 		<< SERVER_VERSION << " iowghra" << CLDR;
+	} else if (handshakeFlag & NICKNAME_TAKEN){
+		handshake << ":" << SERVER_NAME << " " << ERR_NICKNAMEINUSE
+		<< " * " << clientObj.getNickname() << " :" << MSG_NICKNAME_TAKEN << CLDR;
+	} else if (handshakeFlag & PING){
+		//we will reply to client with PONG
+		handshake << WEECHAT_PONG << " :" << SERVER_NAME << CLDR;
 	}
 	return (handshake.str());
 }
@@ -229,6 +232,18 @@ void	Server::sendMessage(pollfd& client, std::string& message){
 	std::cout << "Server sent: " << message;
 }
 
+bool	Server::isNicknameTaken(std::string& nickname){
+	for (size_t i = 1; i < this->serverCapacity; i++){
+		pollfd &client = this->clients[i];
+		if (client.fd < 0)
+			continue;
+		Client &clientObj = this->clientMap[client.fd];
+		if (clientObj.getNickname() == nickname)
+			return (true);
+	}
+	return (false);
+}
+
 /**
  * @brief This function will check what kind of operation we recived from the client
  * and will send back to the client the message appropiratley.
@@ -245,6 +260,8 @@ void	Server::performHandshake(pollfd& client, const std::string& handshake){
 	Client& clientObj = this->clientMap.at(client.fd);
 	std::string acknowledgementHandshake;
 
+	if (handshakeFlags < 0)
+		return ;
 	if (!(this->password.empty()) && (handshakeFlags & PASSWORD)){
 		std::string password = handshake.substr(5);
 		password.erase(password.find_last_not_of("\r\n") + 1);
@@ -260,9 +277,20 @@ void	Server::performHandshake(pollfd& client, const std::string& handshake){
 		clientObj.setRecvCab(true);
 	if (handshakeFlags & NICKNAME){
 		std::string nickname = handshake.substr(5);
-		password.erase(password.find_last_not_of("\r\n") + 1);
-		clientObj.setNickname(nickname);
+		nickname.erase(nickname.find_last_not_of("\r\n") + 1);
+		std::cout << "Is nickname taken: " << isNicknameTaken(nickname) << std::endl;
+		if (!isNicknameTaken(nickname)){
+			clientObj.setNickname(nickname);
+		}else{
+			handshakeFlags = NICKNAME_TAKEN;
+			std::string tmpNickname = clientObj.getNickname();
+			clientObj.setNickname(nickname);
+			acknowledgementHandshake = constructHandshake(client, handshakeFlags);
+			clientObj.setNickname(tmpNickname);
+			return ;
+		}
 		clientObj.setRecvNick(true);
+		std::cout << "Client nickname: " << clientObj.getNickname() << std::endl;
 	}
 	if (handshakeFlags & USER){
 		std::string username = handshake.substr(handshake.find(" ") + 1);
@@ -274,6 +302,7 @@ void	Server::performHandshake(pollfd& client, const std::string& handshake){
 	if (handshakeFlags & CABAILITY_END){
 		handshakeFlags = WELCOME_USER;
 		acknowledgementHandshake = constructHandshake(client, handshakeFlags);
+		clientObj.setRole(CLIENT_ROLE_REGULAR);
 	}
 
 	if (handshakeFlags & QUIT){
@@ -282,6 +311,9 @@ void	Server::performHandshake(pollfd& client, const std::string& handshake){
 	}
 
 	if (handshakeFlags & LIST)
+		acknowledgementHandshake = constructHandshake(client, handshakeFlags);
+
+	if (handshakeFlags & PING)
 		acknowledgementHandshake = constructHandshake(client, handshakeFlags);
 
 	if (!acknowledgementHandshake.empty())

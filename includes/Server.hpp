@@ -6,7 +6,7 @@
 /*   By: hamalmar <hamalmar@student.42abudhabi.a    +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2025/10/01 17:04:26 by hamalmar          #+#    #+#             */
-/*   Updated: 2025/10/22 16:19:34 by hamalmar         ###   ########.fr       */
+/*   Updated: 2025/10/22 23:09:45 by hamalmar         ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
@@ -93,8 +93,9 @@ class Server{
 		void	closeClientConnection(pollfd& client);
 		void	rejectClient(int clientSocket);
 		void	sendMessage(pollfd& client, std::string& message);
+		bool	isNicknameTaken(std::string& nickname);
 
-	public:
+		public:
 		~Server();
 		Server(int port, const std::string& password);
 		void	start(void);
