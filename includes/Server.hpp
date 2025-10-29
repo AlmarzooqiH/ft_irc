@@ -77,15 +77,15 @@ class Server{
 		bool isRunning;
 
 
-		Server();
-		Server(const Server& right);
-		Server& operator=(const Server&  right);
-		void	performHandshake(pollfd& client, const std::string& handshake);
-		int checkHandshake(const std::string& handshake);
-		std::string constructHandshake(int handshakeFlag);
-		std::string	recieveData(pollfd& client);
-
-	public:
+	Server();
+	Server(const Server& right);
+	Server& operator=(const Server&  right);
+	void	performHandshake(pollfd& client, const std::string& handshake);
+	void	handleMessage(pollfd& client, const std::string& rawMessage);
+	void	processCommand(int clientFd, const std::string& command, const std::vector<std::string>& params);
+	int checkHandshake(const std::string& handshake);
+	std::string constructHandshake(int handshakeFlag);
+	std::string	recieveData(pollfd& client);	public:
 		~Server();
 		Server(int port, std::string& password);
 		void	start(void);

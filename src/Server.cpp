@@ -11,6 +11,7 @@
 /* ************************************************************************** */
 
 #include "../includes/Server.hpp"
+#include "../includes/Message.hpp"
 
 Server::Server(){}
 Server::Server(const Server& right){
@@ -184,6 +185,109 @@ void	Server::performHandshake(pollfd& client, const std::string& handshake){
 	}
 }
 
+/**
+ * @brief Handle a complete IRC message using proper RFC 2812 parsing
+ * 
+ * This method replaces the simple string-based handshake parsing with
+ * proper message parsing according to IRC protocol specification.
+ * 
+ * @param client The client pollfd structure
+ * @param rawMessage The raw message string (without \r\n)
+ */
+void	Server::handleMessage(pollfd& client, const std::string& rawMessage){
+	Message msg(rawMessage);
+	
+	if (!msg.isValid()){
+		send(client.fd, CLIENT_SOMETHING_WENT_WRONG.c_str(), CLIENT_SOMETHING_WENT_WRONG.length(), MSG_DONTWAIT);
+		return;
+	}
+
+	std::string command = msg.getCommand();
+	std::vector<std::string> params = msg.getParameters();
+
+	processCommand(client.fd, command, params);
+}
+
+/**
+ * @brief Process IRC commands according to RFC 2812
+ * 
+ * @param clientFd The client file descriptor
+ * @param command The IRC command (e.g., PASS, NICK, USER, JOIN, PRIVMSG)
+ * @param params The command parameters
+ */
+void	Server::processCommand(int clientFd, const std::string& command, const std::vector<std::string>& params){
+	std::string cmd = command;
+	for (size_t i = 0; i < cmd.length(); i++) {
+		cmd[i] = std::toupper(cmd[i]); //Might be c++11 not sure yet
+	}
+
+	if (cmd == "CAP") {
+		if (params.size() > 0) {
+			std::string subCmd = params[0];
+			for (size_t i = 0; i < subCmd.length(); i++) {
+				subCmd[i] = std::toupper(subCmd[i]);
+			}
+			
+			if (subCmd == "LS") {
+				std::string response = constructHandshake(CABAILITY_LS);
+				send(clientFd, response.c_str(), response.length(), MSG_DONTWAIT);
+			}
+		}
+		return;
+	}
+
+	if (cmd == "PASS") {
+		if (params.size() < 1) {
+			std::string error = ":HAI 461 * PASS :Not enough parameters\r\n";
+			send(clientFd, error.c_str(), error.length(), MSG_DONTWAIT);
+			return;
+		}
+		
+		std::string password = params[0];
+		if (password != this->password) {
+			std::string response = constructHandshake(INVALID_PASSWORD);
+			send(clientFd, response.c_str(), response.length(), MSG_DONTWAIT);
+			this->clientMap.erase(clientFd);
+			close(clientFd);
+			return;
+		}
+		return;
+	}
+
+	if (cmd == "NICK") {
+		if (params.size() < 1) {
+			std::string error = ":HAI 431 * :No nickname given\r\n";
+			send(clientFd, error.c_str(), error.length(), MSG_DONTWAIT);
+			return;
+		}
+		
+		std::string nickname = params[0];
+		// TODO: Validate nickname format and check for duplicates
+		this->clientMap[clientFd].setNickname(nickname);
+		return;
+	}
+
+	if (cmd == "USER") {
+		if (params.size() < 4) {
+			std::string error = ":HAI 461 * USER :Not enough parameters\r\n";
+			send(clientFd, error.c_str(), error.length(), MSG_DONTWAIT);
+			return;
+		}
+		
+		std::string username = params[0];
+		// params[1] is mode (usually "0")
+		// params[2] is unused (usually "*")
+		// params[3] is realname
+		this->clientMap[clientFd].setUsername(username);
+		return;
+	}
+
+	// Add more command handlers here (JOIN, PART, PRIVMSG, etc.)
+	
+	std::string error = ":HAI 421 * " + command + " :Unknown command\r\n";
+	send(clientFd, error.c_str(), error.length(), MSG_DONTWAIT);
+}
+
 std::string	Server::recieveData(pollfd& client){
 	char	buffer[BUFFER_SIZE];
 	ssize_t	recievedBytes = recv(client.fd, buffer, BUFFER_SIZE, MSG_DONTWAIT);
@@ -230,15 +334,19 @@ void	Server::start(void){
 					errorLogFile << "Failed to recieve data from client(" << client.fd << ")" << std::endl;
 					continue;
 				}
-				std::string& clientBuffer = this->clientBuffer[client.fd];
-				clientBuffer += buffer;
-				size_t endPosition = clientBuffer.find("\r\n");
-				while (endPosition != std::string::npos){
-					std::string handshake = clientBuffer.substr(0, endPosition);
-					performHandshake(client, handshake);
-					clientBuffer.erase(0, endPosition + 2);
-					endPosition = clientBuffer.find("\r\n");
-				}
+			std::string& clientBuffer = this->clientBuffer[client.fd];
+			clientBuffer += buffer;
+			size_t endPosition = clientBuffer.find("\r\n");
+			while (endPosition != std::string::npos){
+				std::string message = clientBuffer.substr(0, endPosition);
+				
+				// Use the new RFC 2812 compliant message handler
+				handleMessage(client, message);
+				// performHandshake(client, message);
+
+				clientBuffer.erase(0, endPosition + 2);
+				endPosition = clientBuffer.find("\r\n");
+			}
 				logFile << buffer << std::endl;
 			}
 		}
