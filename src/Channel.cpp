@@ -15,24 +15,31 @@
 Channel::Channel() : 
     channelName(""),
     topic(""),
+    createdAt(""),
+    invitedUsers(),
+    channelMembers(),
+    inviteOnly(false),
+    topicRestricted(true),
     key(""),
     userLimit(-1),
-    inviteOnly(false),
-    topicRestricted(true)
+    operators()
 {}
 
 Channel::Channel(const std::string& name) : 
     channelName(name),
     topic(""),
+    createdAt(""),
+    invitedUsers(),
+    channelMembers(),
+    inviteOnly(false),
+    topicRestricted(true),
     key(""),
     userLimit(-1),
-    inviteOnly(false),
-    topicRestricted(true)
+    operators()
 {
     std::time_t currentTime = std::time(NULL); 
     std::ostringstream oss;
     oss << currentTime;
-    // oss << std::put_time(std::localtime(&currentTime), "%Y-%m-%d %H:%M:%S");
     createdAt = oss.str();
 }
 
@@ -44,17 +51,23 @@ Channel& Channel::operator=(const Channel& right){
     if (this != &right){
         this->channelName = right.channelName;
         this->topic = right.topic;
+        this->createdAt = right.createdAt;
+        this->invitedUsers = right.invitedUsers;
         this->channelMembers = right.channelMembers;
-        this->operators = right.operators;
+        this->inviteOnly = right.inviteOnly;           // FIXED: Order now matches header
+        this->topicRestricted = right.topicRestricted; // FIXED: Order now matches header
         this->key = right.key;
         this->userLimit = right.userLimit;
-        this->inviteOnly = right.inviteOnly;
-        this->topicRestricted = right.topicRestricted;
+        this->operators = right.operators;
 	}
 	return (*this);
 }
 
 Channel::~Channel(){}
+
+/* ---------------------------------------------- */
+/*            Member Management                   */
+/* ---------------------------------------------- */
 
 void Channel::addMember(int clientFd) {
     channelMembers.insert(clientFd);
@@ -63,6 +76,13 @@ void Channel::addMember(int clientFd) {
 void Channel::removeMember(int clientFd) {
     channelMembers.erase(clientFd);
     operators.erase(clientFd);
+    invitedUsers.erase(clientFd);
+    
+    // Auto-promote if no operators left
+    if (operators.empty() && !channelMembers.empty()) {
+        int newOp = *channelMembers.begin();
+        addOperator(newOp);
+    }
 }
 
 bool Channel::hasMember(int clientFd) const {
@@ -73,7 +93,30 @@ const std::set<int>& Channel::getMembers() const {
     return channelMembers;
 }
 
-// Operator management
+size_t Channel::getMemberCount() const {
+    return channelMembers.size();
+}
+
+/* ---------------------------------------------- */
+/*         Invitation Management                  */
+/* ---------------------------------------------- */
+
+void Channel::inviteUser(int clientFd) {
+    invitedUsers.insert(clientFd);
+}
+
+bool Channel::isInvited(int clientFd) const {
+    return invitedUsers.find(clientFd) != invitedUsers.end();
+}
+
+void Channel::removeInvite(int clientFd) {
+    invitedUsers.erase(clientFd);
+}
+
+/* ---------------------------------------------- */
+/*          Operator Management                   */
+/* ---------------------------------------------- */
+
 void Channel::addOperator(int clientFd) {
     if (hasMember(clientFd)) {
         operators.insert(clientFd);
@@ -88,7 +131,62 @@ bool Channel::isOperator(int clientFd) const {
     return operators.find(clientFd) != operators.end();
 }
 
-// Getters
+const std::set<int>& Channel::getOperators() const {
+    return operators;
+}
+
+size_t Channel::getOperatorCount() const {
+    return operators.size();
+}
+
+/* ---------------------------------------------- */
+/*            Broadcasting Messages               */
+/* ---------------------------------------------- */
+
+void Channel::broadcast(const std::string& message) {
+    for (std::set<int>::iterator it = channelMembers.begin(); it != channelMembers.end(); ++it) {
+        send(*it, message.c_str(), message.length(), MSG_DONTWAIT);
+    }
+}
+
+void Channel::broadcast(const std::string& message, int excludeFd) {
+    for (std::set<int>::iterator it = channelMembers.begin(); it != channelMembers.end(); ++it) {
+        if (*it != excludeFd)
+            send(*it, message.c_str(), message.length(), MSG_DONTWAIT);
+    }
+}
+
+/* ---------------------------------------------- */
+/*         Channel Info & Replies                 */
+/* ---------------------------------------------- */
+
+std::string Channel::getNamesReply(const std::map<int, Client>& clientMap) const {
+    std::string names;
+    
+    // Operators first with @
+    for (std::set<int>::const_iterator it = operators.begin(); it != operators.end(); ++it) {
+        std::map<int, Client>::const_iterator clientIt = clientMap.find(*it);
+        if (clientIt != clientMap.end()) {
+            if (!names.empty()) names += " ";
+            names += "@" + clientIt->second.getNickname();
+        }
+    }
+    
+    // Regular members (exclude operators)
+    for (std::set<int>::const_iterator it = channelMembers.begin(); it != channelMembers.end(); ++it) {
+        if (operators.find(*it) != operators.end())
+            continue;  // Skip operators, already added
+        
+        std::map<int, Client>::const_iterator clientIt = clientMap.find(*it);
+        if (clientIt != clientMap.end()) {
+            if (!names.empty()) names += " ";
+            names += clientIt->second.getNickname();
+        }
+    }
+    
+    return names;
+}
+
 std::string Channel::getName() const {
     return channelName;
 }
@@ -100,6 +198,10 @@ std::string Channel::getTopic() const {
 std::string Channel::getCreationTime() const {
     return createdAt;
 }
+
+/* ---------------------------------------------- */
+/*              Mode Getters                      */
+/* ---------------------------------------------- */
 
 bool Channel::isInviteOnly() const {
     return inviteOnly;
@@ -117,10 +219,9 @@ int Channel::getUserLimit() const {
     return userLimit;
 }
 
-// Setters
-void Channel::setTopic(const std::string& newTopic) {
-    topic = newTopic;
-}
+/* ---------------------------------------------- */
+/*              Mode Setters                      */
+/* ---------------------------------------------- */
 
 void Channel::setInviteOnly(bool value) {
     inviteOnly = value;
@@ -138,3 +239,6 @@ void Channel::setUserLimit(int limit) {
     userLimit = limit;
 }
 
+void Channel::setTopic(const std::string& newTopic) {
+    topic = newTopic;
+}

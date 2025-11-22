@@ -17,6 +17,7 @@
 # include "SocketHeaders.hpp"
 # include "UtilityHeaders.hpp"
 # include "Client.hpp"
+# include "Channel.hpp"
 
 class Server{
 
@@ -72,6 +73,9 @@ class Server{
 
 		//This will hold the buffer of the client when we will be using recv.
 		std::map<int, std::string> clientBuffer;
+
+		//Channels map
+		std::map<std::string, Channel> channelMap;
 
 		//This will be used for the event loop.
 		bool isRunning;

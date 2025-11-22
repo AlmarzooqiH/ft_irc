@@ -10,23 +10,27 @@
 /*                                                                            */
 /* ************************************************************************** */
 
-#ifndef CLIENT_HPP
-# define CLIENT_HPP
-# include "UtilityHeaders.hpp"
+#ifndef CHANNEL_HPP
+# define CHANNEL_HPP
 
+# include "UtilityHeaders.hpp"
+# include "Client.hpp"
+
+class Client; 
 
 class Channel {
     private:
         std::string channelName;
         std::string topic;
         std::string createdAt;
+        std::set<int> invitedUsers; 
         std::set<int> channelMembers;  // Client FDs (only store FDs to avoid nickname issues)
-        std::set<int> operators;       // Operator FDs (only store FDs)
-        std::string key;               // Channel password (+k mode)
-        int userLimit;                 // -1 = no limit (+l mode)
         bool inviteOnly;               // +i mode
         bool topicRestricted;          // +t mode (only ops can change topic)
-
+        std::string key;               // Channel password (+k mode)
+        int userLimit;                 // -1 = no limit (+l mode)
+        std::set<int> operators;       // Operator FDs (+o mode)
+        
     public:
         // Constructors and destructor
         Channel();
@@ -34,33 +38,49 @@ class Channel {
         Channel(const Channel& copy); // private
         Channel& operator=(const Channel& right); // private
         ~Channel();
-
+        
         // Member management
         void addMember(int clientFd);
         void removeMember(int clientFd);
         bool hasMember(int clientFd) const;
         const std::set<int>& getMembers() const;
-
+        size_t getMemberCount() const;
+        
+        // Invitation management
+        void inviteUser(int clientFd);
+        bool isInvited(int clientFd) const;
+        void removeInvite(int clientFd);
+        
         // Operator management
         void addOperator(int clientFd);
         void removeOperator(int clientFd);
         bool isOperator(int clientFd) const;
-
-        // Getters
+        const std::set<int>& getOperators() const;
+        size_t getOperatorCount() const;
+        
+        // Broadcasting messages
+        void broadcast(const std::string& message);
+        void broadcast(const std::string& message, int excludeFd);
+        
+        // Channel info and replies
+        std::string getNamesReply(const std::map<int, Client>& clientMap) const;
         std::string getName() const;
         std::string getTopic() const;
-        bool isInviteOnly() const;
-        bool isTopicRestricted() const;
-        std::string getKey() const;
-        int getUserLimit() const;
+        std::string getCreationTime() const;
         
-        // Setters
-        void setTopic(const std::string& newTopic);
-        void setInviteOnly(bool value);
-        void setTopicRestricted(bool value);
-        void setKey(const std::string& password);
-        void setUserLimit(int limit);
 
+        // Mode Getters
+        bool isInviteOnly() const;          // +i mode
+        bool isTopicRestricted() const;     // +t mode
+        std::string getKey() const;         // +k mode
+        int getUserLimit() const;           // +l mode
+            
+        // Mode Setters
+        void setInviteOnly(bool value);                  // +i mode
+        void setTopicRestricted(bool value);             // +t mode
+        void setKey(const std::string& password);        // +k mode
+        void setUserLimit(int limit);                    // +l mode
+        void setTopic(const std::string& newTopic);      // Topic content 
 };
 
 # endif
