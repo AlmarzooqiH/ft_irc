@@ -218,9 +218,12 @@ void	Server::handleMessage(pollfd& client, const std::string& rawMessage){
 void	Server::processCommand(int clientFd, const std::string& command, const std::vector<std::string>& params){
 	std::string cmd = command;
 	for (size_t i = 0; i < cmd.length(); i++) {
-		cmd[i] = std::toupper(cmd[i]); //Might be c++11 not sure yet
+		cmd[i] = std::toupper(cmd[i]);
 	}
 
+	Client& client = this->clientMap[clientFd];
+
+	// Handle CAP command (client capability negotiation)
 	if (cmd == "CAP") {
 		if (params.size() > 0) {
 			std::string subCmd = params[0];
@@ -230,62 +233,110 @@ void	Server::processCommand(int clientFd, const std::string& command, const std:
 			
 			if (subCmd == "LS") {
 				std::string response = constructHandshake(CABAILITY_LS);
-				send(clientFd, response.c_str(), response.length(), MSG_DONTWAIT);
+				sendResponse(clientFd, response);
 			}
 		}
 		return;
 	}
 
+	// Handle PASS command - must be first command before registration
 	if (cmd == "PASS") {
+		if (client.isFullyRegistered()) {
+			sendNumericReply(clientFd, ERR_ALREADYREGISTRED, ":You may not reregister");
+			return;
+		}
+		
 		if (params.size() < 1) {
-			std::string error = ":HAI 461 * PASS :Not enough parameters\r\n";
-			send(clientFd, error.c_str(), error.length(), MSG_DONTWAIT);
+			sendNumericReply(clientFd, ERR_NEEDMOREPARAMS, "PASS :Not enough parameters");
 			return;
 		}
 		
 		std::string password = params[0];
 		if (password != this->password) {
-			std::string response = constructHandshake(INVALID_PASSWORD);
-			send(clientFd, response.c_str(), response.length(), MSG_DONTWAIT);
+			sendNumericReply(clientFd, ERR_PASSWDMISMATCH, ":Password incorrect");
 			this->clientMap.erase(clientFd);
 			close(clientFd);
 			return;
 		}
+		
+		client.setPasswordAuthenticated(true);
 		return;
 	}
 
+	// Handle NICK command - set or change nickname
 	if (cmd == "NICK") {
 		if (params.size() < 1) {
-			std::string error = ":HAI 431 * :No nickname given\r\n";
-			send(clientFd, error.c_str(), error.length(), MSG_DONTWAIT);
+			sendNumericReply(clientFd, ERR_NONICKNAMEGIVEN, ":No nickname given");
 			return;
 		}
 		
 		std::string nickname = params[0];
-		// TODO: Validate nickname format and check for duplicates
-		this->clientMap[clientFd].setNickname(nickname);
+		
+		if (!isNicknameValid(nickname)) {
+			sendNumericReply(clientFd, ERR_ERRONEUSNICKNAME, nickname + " :Erroneous nickname");
+			return;
+		}
+		
+		if (isNicknameInUse(nickname)) {
+			sendNumericReply(clientFd, ERR_NICKNAMEINUSE, nickname + " :Nickname is already in use");
+			return;
+		}
+		
+		bool wasRegistered = client.isFullyRegistered();
+		client.setNickname(nickname);
+		client.setNicknameSet(true);
+		
+		if (!wasRegistered && client.isFullyRegistered()) {
+			sendWelcomeMessages(clientFd);
+		}
 		return;
 	}
 
+	/*USER john 0 * :John Doe
+     ^^^^ ^ ^  ^^^^^^^^^
+            |    | |  └─ Real name (can have spaces)
+            |    | └──── Unused (always *)
+            |    └────── Mode (usually 0)
+            └─────────── Username
+
+	USER alice 0 * :Alice from Wonderland
+	USER bot123 0 * :IRC Bot v1.0
+	USER testuser 0 * :Test Account
+	USER admin 8 * :Server Administrator  ← 8 = invisible mode (rarely used)*/
+	
 	if (cmd == "USER") {
+		if (client.isUserSet()) {
+			sendNumericReply(clientFd, ERR_ALREADYREGISTRED, ":You may not reregister");
+			return;
+		}
+		
 		if (params.size() < 4) {
-			std::string error = ":HAI 461 * USER :Not enough parameters\r\n";
-			send(clientFd, error.c_str(), error.length(), MSG_DONTWAIT);
+			sendNumericReply(clientFd, ERR_NEEDMOREPARAMS, "USER :Not enough parameters");
 			return;
 		}
 		
 		std::string username = params[0];
-		// params[1] is mode (usually "0")
-		// params[2] is unused (usually "*")
-		// params[3] is realname
-		this->clientMap[clientFd].setUsername(username);
+		std::string realname = params[3];
+		
+		bool wasRegistered = client.isFullyRegistered();
+		client.setUsername(username);
+		client.setRealname(realname);
+		client.setUserSet(true);
+		
+		if (!wasRegistered && client.isFullyRegistered()) {
+			sendWelcomeMessages(clientFd);
+		}
 		return;
 	}
 
-	// Add more command handlers here (JOIN, PART, PRIVMSG, etc.)
-	
-	std::string error = ":HAI 421 * " + command + " :Unknown command\r\n";
-	send(clientFd, error.c_str(), error.length(), MSG_DONTWAIT);
+	// Commands that require authentication
+	if (!client.isPasswordAuthenticated()) {
+		sendNumericReply(clientFd, ERR_NOTREGISTERED, ":You have not registered");
+		return;
+	}
+
+	// Unknown command
+	sendNumericReply(clientFd, ERR_UNKNOWNCOMMAND, command + " :Unknown command");
 }
 
 std::string	Server::recieveData(pollfd& client){
@@ -355,6 +406,118 @@ void	Server::start(void){
 	}
 	logFile.close();
 	errorLogFile.close();
+}
+
+/**
+ * @brief Send a response to a client
+ * @param clientFd The client file descriptor
+ * @param response The response string (should include \r\n)
+ */
+void	Server::sendResponse(int clientFd, const std::string& response){
+	send(clientFd, response.c_str(), response.length(), MSG_DONTWAIT);
+}
+
+/**
+ * @brief Send a numeric reply to a client (RFC 2812 format)
+ * @param clientFd The client file descriptor
+ * @param numeric The numeric reply code (e.g., "001", "461")
+ * @param message The message text
+ */
+void	Server::sendNumericReply(int clientFd, const std::string& numeric, const std::string& message){
+	std::string nickname = "*";
+	
+	// Use actual nickname if client has set one
+	if (this->clientMap.find(clientFd) != this->clientMap.end()) {
+		Client& client = this->clientMap[clientFd];
+		if (client.isNicknameSet()) {
+			nickname = client.getNickname();
+		}
+	}
+	
+	std::string response = ":" + SERVER_NAME + " " + numeric + " " + nickname + " " + message + "\r\n";
+	sendResponse(clientFd, response);
+}
+
+/**
+ * @brief Send welcome messages after successful registration (001-004)
+ * @param clientFd The client file descriptor
+ */
+void	Server::sendWelcomeMessages(int clientFd){
+	Client& client = this->clientMap[clientFd];
+	std::string nick = client.getNickname();
+	std::string user = client.getUsername();
+	
+	// 001 RPL_WELCOME
+	std::string welcome = "Welcome to the " + SERVER_NAME + " IRC Network " + nick + "!" + user + "@localhost";
+	sendNumericReply(clientFd, RPL_WELCOME, ":" + welcome);
+	
+	// 002 RPL_YOURHOST
+	std::string yourhost = "Your host is " + SERVER_NAME + ", running version 1.0";
+	sendNumericReply(clientFd, RPL_YOURHOST, ":" + yourhost);
+	
+	// 003 RPL_CREATED
+	std::string created = "This server was created " + std::string(__DATE__);
+	sendNumericReply(clientFd, RPL_CREATED, ":" + created);
+	
+	// 004 RPL_MYINFO
+	std::string myinfo = SERVER_NAME + " 1.0 o o";
+	sendNumericReply(clientFd, RPL_MYINFO, myinfo);
+}
+
+/**
+ * @brief Validate nickname format according to RFC 2812
+ * Nickname = ( letter / special ) *8( letter / digit / special / "-" )
+ * special = %x5B-60 / %x7B-7D  ; "[", "]", "\", "`", "_", "^", "{", "|", "}"
+ * @param nickname The nickname to validate
+ * @return true if valid, false otherwise
+ */
+bool	Server::isNicknameValid(const std::string& nickname){
+	if (nickname.empty() || nickname.length() > 9) {
+		return false;
+	}
+	
+	// First character must be letter or special character
+	char first = nickname[0];
+	bool validFirst = (first >= 'A' && first <= 'Z') || 
+	                  (first >= 'a' && first <= 'z') ||
+	                  (first >= '[' && first <= '`') ||
+	                  (first >= '{' && first <= '}');
+	
+	if (!validFirst) {
+		return false;
+	}
+	
+	// Rest can be letter, digit, special, or dash
+	for (size_t i = 1; i < nickname.length(); i++) {
+		char c = nickname[i];
+		bool valid = (c >= 'A' && c <= 'Z') || 
+		             (c >= 'a' && c <= 'z') ||
+		             (c >= '0' && c <= '9') ||
+		             (c >= '[' && c <= '`') ||
+		             (c >= '{' && c <= '}') ||
+		             (c == '-');
+		
+		if (!valid) {
+			return false;
+		}
+	}
+	
+	return true;
+}
+
+/**
+ * @brief Check if a nickname is already in use by another client
+ * @param nickname The nickname to check
+ * @return true if in use, false otherwise
+ */
+bool	Server::isNicknameInUse(const std::string& nickname){
+	for (std::map<int, Client>::iterator it = this->clientMap.begin(); 
+	     it != this->clientMap.end(); ++it) {
+		if (it->second.getNickname() == nickname) {
+			return true;
+		}
+	}
+	return false;
 }
 
 const char	*Server::InvalidPortNumberException::what() const throw(){

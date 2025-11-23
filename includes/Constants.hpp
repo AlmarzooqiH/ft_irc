@@ -69,4 +69,33 @@
 		NICKNAME = 1 << 5,
 		USER = 1 << 6,
 	};
+
+	// IRC Numeric Replies (RFC 2812)
+	// Welcome messages (001-004)
+	const std::string RPL_WELCOME("001");
+	const std::string RPL_YOURHOST("002");
+	const std::string RPL_CREATED("003");
+	const std::string RPL_MYINFO("004");
+
+	// Error replies
+	const std::string ERR_NOSUCHNICK("401");
+	const std::string ERR_NOSUCHCHANNEL("403");
+	const std::string ERR_CANNOTSENDTOCHAN("404");
+	const std::string ERR_TOOMANYCHANNELS("405");
+	const std::string ERR_UNKNOWNCOMMAND("421");
+	const std::string ERR_NONICKNAMEGIVEN("431");
+	const std::string ERR_ERRONEUSNICKNAME("432");
+	const std::string ERR_NICKNAMEINUSE("433");
+	const std::string ERR_USERNOTINCHANNEL("441");
+	const std::string ERR_NOTONCHANNEL("442");
+	const std::string ERR_NOTREGISTERED("451");
+	const std::string ERR_NEEDMOREPARAMS("461");
+	const std::string ERR_ALREADYREGISTRED("462");
+	const std::string ERR_PASSWDMISMATCH("464");
+	const std::string ERR_CHANNELISFULL("471");
+	const std::string ERR_INVITEONLYCHAN("473");
+	const std::string ERR_BADCHANNELKEY("475");
+	const std::string ERR_BADCHANMASK("476");
+	const std::string ERR_CHANOPRIVSNEEDED("482");
+
 #endif

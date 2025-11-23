@@ -85,7 +85,14 @@ class Server{
 	void	processCommand(int clientFd, const std::string& command, const std::vector<std::string>& params);
 	int checkHandshake(const std::string& handshake);
 	std::string constructHandshake(int handshakeFlag);
-	std::string	recieveData(pollfd& client);	public:
+	std::string	recieveData(pollfd& client);
+	
+	// Helper methods for sending IRC responses
+	void	sendResponse(int clientFd, const std::string& response);
+	void	sendNumericReply(int clientFd, const std::string& numeric, const std::string& message);
+	void	sendWelcomeMessages(int clientFd);
+	bool	isNicknameValid(const std::string& nickname);
+	bool	isNicknameInUse(const std::string& nickname);	public:
 		~Server();
 		Server(int port, std::string& password);
 		void	start(void);
