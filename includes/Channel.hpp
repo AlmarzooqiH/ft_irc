@@ -5,42 +5,84 @@
 /*                                                    +:+ +:+         +:+     */
 /*   By: hamalmar <hamalmar@student.42abudhabi.a    +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
-/*   Created: 2025/10/23 09:46:19 by hamalmar          #+#    #+#             */
-/*   Updated: 2025/10/23 14:08:34 by hamalmar         ###   ########.fr       */
+/*   Created: 2025/11/01 15:02:39 by ialashqa          #+#    #+#             */
+/*   Updated: 2025/11/24 21:49:04 by hamalmar         ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
 #ifndef CHANNEL_HPP
 # define CHANNEL_HPP
 
+# include <set>
 # include "UtilityHeaders.hpp"
-# include "SocketHeaders.hpp"
+# include "Client.hpp"
+# include "UtilitiyFunctions.hpp"
 
+class Client; 
 
-/**
- * @note Will extract the proper data feilds for the class from the irc  protocol
- * manual later on.
- * 
- * @author Hamad
-*/
-
-class Channel{
+class Channel {
     private:
         std::string channelName;
         std::string topic;
-        std::map<int, pollfd> channelMembers;
-
+        std::string createdAt;
+        std::set<int> invitedUsers; 
+        std::set<int> channelMembers;  // Client FDs (only store FDs to avoid nickname issues)
+        bool inviteOnly;               // +i mode
+        bool topicRestricted;          // +t mode (only ops can change topic)
+        std::string key;               // Channel password (+k mode)
+        int userLimit;                 // -1 = no limit (+l mode)
+        std::set<int> operators;       // Operator FDs (+o mode)
+        
     public:
+        // Constructors and destructor
         Channel();
+        Channel(const std::string& name);
+        Channel(const Channel& copy); // private
+        Channel& operator=(const Channel& right); // private
         ~Channel();
-        Channel(const Channel& right);
-        Channel& operator=(const Channel& right);
+        
+        // Member management
+        void addMember(int clientFd);
+        void removeMember(int clientFd);
+        bool hasMember(int clientFd) const;
+        const std::set<int>& getMembers() const;
+        size_t getMemberCount() const;
+        
+        // Invitation management
+        void inviteUser(int clientFd);
+        bool isInvited(int clientFd) const;
+        void removeInvite(int clientFd);
+        
+        // Operator management
+        void addOperator(int clientFd);
+        void removeOperator(int clientFd);
+        bool isOperator(int clientFd) const;
+        const std::set<int>& getOperators() const;
+        size_t getOperatorCount() const;
+        
+        // Broadcasting messages
+        void broadcast(const std::string& message);
+        void broadcast(const std::string& message, int excludeFd);
+        
+        // Channel info and replies
+        std::string getNamesReply(const std::map<int, Client>& clientMap) const;
+        std::string getName() const;
+        std::string getTopic() const;
+        std::string getCreationTime() const;
+        
 
-        std::string getChannelName(void) const;
-        std::string getTopic(void) const;
-
-        void    setChannelName(const std::string& nName);
-        void    setTopic(const std::string& nTopic);
+        // Mode Getters
+        bool isInviteOnly() const;          // +i mode
+        bool isTopicRestricted() const;     // +t mode
+        std::string getKey() const;         // +k mode
+        int getUserLimit() const;           // +l mode
+            
+        // Mode Setters
+        void setInviteOnly(bool value);                  // +i mode
+        void setTopicRestricted(bool value);             // +t mode
+        void setKey(const std::string& password);        // +k mode
+        void setUserLimit(int limit);                    // +l mode
+        void setTopic(const std::string& newTopic);      // Topic content 
 };
 
-#endif
+# endif

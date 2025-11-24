@@ -6,7 +6,7 @@
 /*   By: hamalmar <hamalmar@student.42abudhabi.a    +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2025/10/01 16:38:26 by hamalmar          #+#    #+#             */
-/*   Updated: 2025/10/23 11:02:36 by hamalmar         ###   ########.fr       */
+/*   Updated: 2025/11/25 00:26:09 by hamalmar         ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
@@ -87,6 +87,8 @@
 	const std::string WEECHAT_LIST("LIST");
 	const std::string WEECHAT_PING("PING");
 	const std::string WEECHAT_PONG("PONG");
+	const std::string WEECHAT_JOIN("JOIN");
+	const std::string WEECHAT_PRIVMSG("PRIVMSG");
 	const std::string WEECHAT_CHANNEL_PREFIX("&#!+"); //According to the protocol manual
 
 	enum WEECHAT_HANDSHAKE {
@@ -114,39 +116,59 @@
 	 * protocol manual. ^^^^^^^
 	 * @author Hamad.
 	*/
-	enum STATUS_CODES {
-		/**
-		 * The server sends Replies 001 to 004 to a user upon
-		 * successful registration.
-		 * RPL_WELCOME:   Welcome message.
-		 * RPL_YOURHOST:  Server introduction.
-		 * RPL_CREATED:   Server creation date.
-		 * RPL_MYINFO:    Server version.
-		*/
-		RPL_WELCOME = 001,
-		RPL_YOURHOST = 002,
-		RPL_CREATED = 003,
-		RPL_MYINFO = 004,
+	// Welcome messages
+	const std::string RPL_WELCOME("001");
+	const std::string RPL_YOURHOST("002");
+	const std::string RPL_CREATED("003");
+	const std::string RPL_MYINFO("004");
+	const std::string RPL_LIST("322");
+	const std::string RPL_LISTEND("323");
+	const std::string RPL_TOPIC("332");
+	const std::string RPL_TOPICSET("333");
 
-		/**
-		 * ERR_NOSUCHSERVIC: Returned to a client which is attempting to send a SQUERY
-		 * to a service which does not exist
+	// Missing/invalid service
+	const std::string ERR_NOSUCHSERVICE("408");
+	const std::string ERR_NOORIGIN("409");
 
-		 * ERR_NOORIGIN: PING or PONG message missing the originator parameter
-		*/
-		ERR_NOSUCHSERVICE = 408,
-		ERR_NOORIGIN = 409,
+	// Nickname issues
+	const std::string ERR_NICKNAMEINUSE("433");
 
-		/**
-		 * ERR_NICKNAMEINUSE: Returned when a NICK message is processed that results
-		 * in an attempt to change to a currently existing nickname.
-		*/
-		ERR_NICKNAMEINUSE = 433,
+	// Password issues
+	const std::string ERR_PASSWDMISMATCH("464");
 
-		/**
-		 * Returned to indicate a failed attempt at registering a connection for 
-		 * which a password was required and was either not given or incorrect.
-		*/
-		ERR_PASSWDMISMATCH = 464
+	// Other standard errors
+	const std::string ERR_NOSUCHNICK("401");
+	const std::string ERR_NOSUCHCHANNEL("403");
+	const std::string ERR_CANNOTSENDTOCHAN("404");
+	const std::string ERR_TOOMANYCHANNELS("405");
+	const std::string ERR_UNKNOWNCOMMAND("421");
+	const std::string ERR_NONICKNAMEGIVEN("431");
+	const std::string ERR_ERRONEUSNICKNAME("432");
+	const std::string ERR_USERNOTINCHANNEL("441");
+	const std::string ERR_NOTONCHANNEL("442");
+	const std::string ERR_NOTREGISTERED("451");
+	const std::string ERR_NEEDMOREPARAMS("461");
+	const std::string ERR_ALREADYREGISTRED("462");
+	const std::string ERR_CHANNELISFULL("471");
+	const std::string ERR_INVITEONLYCHAN("473");
+	const std::string ERR_BADCHANNELKEY("475");
+	const std::string ERR_BADCHANMASK("476");
+	const std::string ERR_CHANOPRIVSNEEDED("482");
+
+	// Hardcoded channels
+	const std::string DEFAULT_CHANNEL_1("#general");
+	const std::string DEFAULT_CHANNEL_2("#random");
+	const std::string DEFAULT_CHANNEL_3("#help");
+	const std::string DEFAULT_CHANNEL_4("#announcements");
+	const std::string DEFAULT_CHANNEL_5("#bots");
+
+	// If you want an array of them
+	const std::string DEFAULT_CHANNELS[] = {
+		DEFAULT_CHANNEL_1,
+		DEFAULT_CHANNEL_2,
+		DEFAULT_CHANNEL_3,
+		DEFAULT_CHANNEL_4,
+		DEFAULT_CHANNEL_5
 	};
+	const unsigned int NUM_DEFAULT_CHANNELS = 5;
 #endif
