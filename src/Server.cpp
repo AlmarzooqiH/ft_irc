@@ -6,7 +6,7 @@
 /*   By: hamalmar <hamalmar@student.42abudhabi.a    +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2025/10/01 23:00:19 by hamalmar          #+#    #+#             */
-/*   Updated: 2025/10/23 13:31:57 by hamalmar         ###   ########.fr       */
+/*   Updated: 2025/11/25 00:53:57 by hamalmar         ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
@@ -92,6 +92,10 @@ Server::Server(int port, const std::string& password){
 		(void)err;
 		throw (Server::FailedToInitalizePollFd());
 	}
+	channels.insert(std::make_pair("#general", Channel("#general")));
+	channels.insert(std::make_pair("#random", Channel("#random")));
+	channels.insert(std::make_pair("#help", Channel("#help")));
+	channels.insert(std::make_pair("#admins", Channel("#admins")));
 	this->isRunning = true;
 }
 
@@ -140,98 +144,6 @@ Server::~Server(){
 	this->serverCapacity = 0;
 }
 
-/**
- * @brief This function will check what kind of operation did weechat send.
- * @param The handshake we recieved.
- * @return If successful it will return a bitmasked value
- * according to the requested operation.
- * 
- * @return On failure it will return -1.
- * @author Hamad
- */
-int	Server::checkHandshake(const std::string& handshake){
-	if (handshake.substr(0, 4) == WEECHAT_PASS) {return (PASSWORD);}
-	else if (handshake.substr(0, 6) == WEECHAT_CABAILITY_LS) {return (CABAILITY_LS);}
-	else if (handshake.substr(0, 7) == WEECHAT_CABAILITY_REQ) {return (CABAILITY_REQ);}
-	else if (handshake.substr(0, 7) == WEECHAT_CABAILITY_END) {return (CABAILITY_END);}
-	else if (handshake.substr(0, 4) == WEECHAT_NICKNAME) {return (NICKNAME);}
-	else if (handshake.substr(0, 4) == WEECHAT_USER) {return (USER);}
-	else if (handshake.substr(0, 4) == WEECHAT_QUIT) {return (QUIT);}
-	else if (handshake.substr(0, 4) == WEECHAT_LIST) {return (LIST);}
-	else if (handshake.substr(0, 4) == WEECHAT_PING) {return (PING);}
-	return (-1);
-}
-
-/**
- * @brief This function will build the server reply that will be sent back to the
- * client.
- * 
- * @param client The client. Will be used to get his nickname.
- * @param handshakeFlag The bitmasked value that we got from checkHandshake() and
- * will construct an apropirate message according the handshake.
- * 
- * @return The appropirate reply to the client and will be used in sendMessage().
- * @author Hamad
- */
-std::string Server::constructHandshake(pollfd& client, int handshakeFlag){
-	Client& clientObj = this->clientMap.at(client.fd);
-	std::ostringstream handshake;
-	if (handshakeFlag & CABAILITY_LS) {
-		handshake << ":" << SERVER_NAME << " ";
-		handshake << "CAP " << clientObj.getNickname() << " LS :";
-		handshake << CLDR;
-	} else if (handshakeFlag & INVALID_PASSWORD) {
-		handshake << ":" << SERVER_NAME << " " << ERR_PASSWDMISMATCH << " * :";
-		handshake << MSG_INVALID_PASSWORD << CLDR;
-	} else if (handshakeFlag & WELCOME_USER) {
-		std::ostringstream num;
-		handshake << ":" << SERVER_NAME << " "
-		<< std::setw(3) << std::setfill('0') << RPL_WELCOME
-		<< " " << clientObj.getNickname() << " :" << MSG_WELCOME << CLDR;
-		
-		handshake << ":" << SERVER_NAME << " "
-		<< std::setw(3) << std::setfill('0') << RPL_YOURHOST
-		<< " " << clientObj.getNickname() << " :Your host is " << SERVER_NAME
-		<< ", running version " << SERVER_VERSION << CLDR;
-
-		handshake << ":" << SERVER_NAME << " "
-		<< std::setw(3) << std::setfill('0') << RPL_CREATED
-		<< " " << clientObj.getNickname() << " :" << MSG_SERVER_CREATION << CLDR;
-		
-		handshake << ":" << SERVER_NAME << " "
-		<< std::setw(3) << std::setfill('0') << RPL_MYINFO
-		<< " " << clientObj.getNickname() << " :" << SERVER_NAME << " "
-		<< SERVER_VERSION << " iowghra" << CLDR;
-	} else if (handshakeFlag & NICKNAME_TAKEN){
-		handshake << ":" << SERVER_NAME << " " << ERR_NICKNAMEINUSE
-		<< " * " << clientObj.getNickname() << " :" << MSG_NICKNAME_TAKEN << CLDR;
-	} else if (handshakeFlag & PING){
-		//we will reply to client with PONG
-		handshake << WEECHAT_PONG << " :" << SERVER_NAME << CLDR;
-	}
-	return (handshake.str());
-}
-
-/**
- * @brief This function will gurantee the message to be sent.
- * @param client The client.
- * @param message The message that we want to send.
- * @note If send() fails we will break from the loop.
- * @return void.
- */
-void	Server::sendMessage(pollfd& client, std::string& message){
-	size_t totalBytesSent = 0;
-	size_t	messageLength = message.length();
-
-	while (totalBytesSent < messageLength){
-		size_t sentBytes = send(client.fd, message.c_str() + totalBytesSent, messageLength - totalBytesSent, DEFAULT_FLAG_SEND);
-		if (sentBytes <= 0)
-			break;
-		totalBytesSent += sentBytes;
-	}
-	std::cout << "Server sent: " << message;
-}
-
 bool	Server::isNicknameTaken(std::string& nickname){
 	for (size_t i = 1; i < this->serverCapacity; i++){
 		pollfd &client = this->clients[i];
@@ -245,103 +157,392 @@ bool	Server::isNicknameTaken(std::string& nickname){
 }
 
 /**
- * @brief This function will check what kind of operation we recived from the client
- * and will send back to the client the message appropiratley.
- * 
- * @param client The client that sent the message.
- * @param handshake The client message that we want to process.
- * 
- * @return void.
- * @author Hamad
+ * @brief Send welcome messages after successful registration (001-004)
+ * @param clientFd The client file descriptor
  */
-void	Server::performHandshake(pollfd& client, const std::string& handshake){
-	std::cout << "Recived handshake: " << handshake << std::endl;
-	int handshakeFlags = checkHandshake(handshake);
-	Client& clientObj = this->clientMap.at(client.fd);
-	std::string acknowledgementHandshake;
+void Server::sendWelcomeMessages(pollfd& client) {
+    Client& clientObj = this->clientMap[client.fd];
+    std::string nick = clientObj.getNickname();
+    std::string user = clientObj.getUsername();
+    std::ostringstream ss;
 
-	if (handshakeFlags < 0)
-		return ;
-	if (!(this->password.empty()) && (handshakeFlags & PASSWORD)){
-		std::string password = handshake.substr(5);
-		password.erase(password.find_last_not_of("\r\n") + 1);
-		if (password != this->password){
-			handshakeFlags = INVALID_PASSWORD;
-			acknowledgementHandshake = constructHandshake(client, handshakeFlags);
-			sendMessage(client, acknowledgementHandshake);
-			closeClientConnection(client);
-			return ;
-		}
-	}
-	if (handshakeFlags & CABAILITY_LS)
-		clientObj.setRecvCab(true);
-	if (handshakeFlags & NICKNAME){
-		std::string nickname = handshake.substr(5);
-		nickname.erase(nickname.find_last_not_of("\r\n") + 1);
-		std::cout << "Is nickname taken: " << isNicknameTaken(nickname) << std::endl;
-		if (!isNicknameTaken(nickname)){
-			clientObj.setNickname(nickname);
-		}else{
-			handshakeFlags = NICKNAME_TAKEN;
-			std::string tmpNickname = clientObj.getNickname();
-			clientObj.setNickname(nickname);
-			acknowledgementHandshake = constructHandshake(client, handshakeFlags);
-			clientObj.setNickname(tmpNickname);
-			return ;
-		}
-		clientObj.setRecvNick(true);
-		std::cout << "Client nickname: " << clientObj.getNickname() << std::endl;
-	}
-	if (handshakeFlags & USER){
-		std::string username = handshake.substr(handshake.find(" ") + 1);
-		username.erase(username.find(" "), username.length());
-		clientObj.setUsername(username);
-		clientObj.setRecvUser(true);
-	}
+    // 001 RPL_WELCOME
+    ss.str(""); ss.clear();
+    ss << ":" << SERVER_NAME << " " << RPL_WELCOME << " " << nick
+       << " :" << MSG_WELCOME << " " << nick << "!" << user << "@localhost" << CLDR;
+    sendMessage(client, ss.str());
 
-	if (handshakeFlags & CABAILITY_END){
-		handshakeFlags = WELCOME_USER;
-		acknowledgementHandshake = constructHandshake(client, handshakeFlags);
-		clientObj.setRole(CLIENT_ROLE_REGULAR);
-	}
+    // 002 RPL_YOURHOST
+    ss.str(""); ss.clear();
+    ss << ":" << SERVER_NAME << " " << RPL_YOURHOST << " " << nick
+       << " :Your host is " << SERVER_NAME << ", running version " << SERVER_VERSION << CLDR;
+    sendMessage(client, ss.str());
 
-	if (handshakeFlags & QUIT){
-		closeClientConnection(client);
-		return ;
-	}
+    // 003 RPL_CREATED
+    ss.str(""); ss.clear();
+    ss << ":" << SERVER_NAME << " " << RPL_CREATED << " " << nick
+       << " :" << MSG_SERVER_CREATION << CLDR;
+    sendMessage(client, ss.str());
 
-	if (handshakeFlags & LIST)
-		acknowledgementHandshake = constructHandshake(client, handshakeFlags);
-
-	if (handshakeFlags & PING)
-		acknowledgementHandshake = constructHandshake(client, handshakeFlags);
-
-	if (!acknowledgementHandshake.empty())
-		sendMessage(client, acknowledgementHandshake);
-	
-	if (clientObj.getRecvNick() && clientObj.getRecvCab()){
-		handshakeFlags = CABAILITY_LS;
-		acknowledgementHandshake = constructHandshake(client, handshakeFlags);
-		sendMessage(client, acknowledgementHandshake);
-		clientObj.setRecvCab(false);
-		std::cout << "Sent to client cabaiblites: " << acknowledgementHandshake;
-	}
+    // 004 RPL_MYINFO
+    ss.str(""); ss.clear();
+    ss << ":" << SERVER_NAME << " " << RPL_MYINFO << " " << nick
+       << " " << SERVER_NAME << " " << SERVER_VERSION << " o o" << CLDR;
+    sendMessage(client, ss.str());
 }
 
 /**
- * @brief This function will recieve the data from the client via recv().
- * 
- * @param client The client that wants to send data.
- * @return The message that the client has sent.
- * @author Hamad
+ * @brief Validate nickname format according to RFC 2812
+ * Nickname = ( letter / special ) *8( letter / digit / special / "-" )
+ * special = %x5B-60 / %x7B-7D  ; "[", "]", "\", "`", "_", "^", "{", "|", "}"
+ * @param nickname The nickname to validate
+ * @return true if valid, false otherwise
  */
-std::string	Server::recieveData(pollfd& client){
-	char	buffer[BUFFER_SIZE];
-	ssize_t	recievedBytes = recv(client.fd, buffer, BUFFER_SIZE, DEFAULT_FLAG_SEND);
-	if (recievedBytes < 0)
-		return (std::string(""));
-	buffer[recievedBytes] = '\0';
-	return (std::string(buffer));
+bool	Server::isNicknameValid(const std::string& nickname){
+	if (nickname.empty() || nickname.length() > 9) {
+		return false;
+	}
+	
+	// First character must be letter or special character
+	char first = nickname[0];
+	bool validFirst = (first >= 'A' && first <= 'Z') || 
+	                  (first >= 'a' && first <= 'z') ||
+	                  (first >= '[' && first <= '`') ||
+	                  (first >= '{' && first <= '}');
+	
+	if (!validFirst) {
+		return false;
+	}
+	
+	// Rest can be letter, digit, special, or dash
+	for (size_t i = 1; i < nickname.length(); i++) {
+		char c = nickname[i];
+		bool valid = (c >= 'A' && c <= 'Z') || 
+		             (c >= 'a' && c <= 'z') ||
+		             (c >= '0' && c <= '9') ||
+		             (c >= '[' && c <= '`') ||
+		             (c >= '{' && c <= '}') ||
+		             (c == '-');
+		
+		if (!valid) {
+			return false;
+		}
+	}
+	
+	return true;
+}
+
+/**
+ * @brief Check if a nickname is already in use by another client
+ * @param nickname The nickname to check
+ * @return true if in use, false otherwise
+ */
+bool	Server::isNicknameInUse(const std::string& nickname){
+	for (std::map<int, Client>::iterator it = this->clientMap.begin(); 
+	     it != this->clientMap.end(); ++it) {
+		if (it->second.getNickname() == nickname) {
+			return true;
+		}
+	}
+	return false;
+}
+
+/**
+ * @brief Send a numeric reply to a client (RFC 2812 format)
+ * @param clientFd The client file descriptor
+ * @param numeric The numeric reply code (e.g., "001", "461")
+ * @param message The message text
+ */
+void	Server::sendNumericReply(pollfd& client, const std::string& numeric, const std::string& message){
+	std::string nickname = "*";
+	
+	// Use actual nickname if client has set one
+	if (this->clientMap.find(client.fd) != this->clientMap.end()) {
+		Client& clientObj = this->clientMap[client.fd];
+		if (clientObj.isNicknameSet()) {
+			nickname = clientObj.getNickname();
+		}
+	}
+	
+	std::string response = ":" + SERVER_NAME + " " + numeric + " " + nickname + " " + message + CLDR;
+	sendMessage(client, response);
+}
+
+void Server::cleanClient(pollfd& client) {
+    if (client.fd >= 0) {
+		std::cout << this->clientMap[client.fd].getNickname() << " Has disconnected!" << std::endl;
+        clientMap.erase(client.fd);
+        clientBuffer.erase(client.fd);
+        close(client.fd);
+        client.fd = -1;
+    }
+}
+
+/**
+ * @brief Process IRC commands according to RFC 2812
+ * 
+ * @param clientFd The client file descriptor
+ * @param command The IRC command (e.g., PASS, NICK, USER, JOIN, PRIVMSG)
+ * @param params The command parameters
+ */
+void	Server::processCommand(pollfd& client, const std::string& command, const std::vector<std::string>& params){
+	std::string cmd = command;
+	for (size_t i = 0; i < cmd.length(); i++) {
+		cmd[i] = std::toupper(cmd[i]);
+	}
+
+	Client& clientObj = this->clientMap[client.fd];
+
+	// Handle CAP command (client capability negotiation)
+	if (cmd == "CAP") {
+		if (params.size() > 0) {
+			std::string subCmd = params[0];
+			for (size_t i = 0; i < subCmd.length(); i++) {
+				subCmd[i] = std::toupper(subCmd[i]);
+			}
+			
+			if (subCmd == "LS") {
+				std::string response = ":" + SERVER_NAME + " CAP " + clientObj.getNickname() + " LS :" + CLDR;
+				sendMessage(client, response);
+			}
+		}
+		return;
+	}
+
+	// Handle PASS command - must be first command before registration
+	if (cmd == "PASS") {
+		if (clientObj.isFullyRegistered()) {
+			sendNumericReply(client, ERR_ALREADYREGISTRED, ":You may not reregister");
+			return;
+		}
+		
+		if (params.size() < 1) {
+			sendNumericReply(client, ERR_NEEDMOREPARAMS, "PASS :Not enough parameters");
+			return;
+		}
+		
+		std::string password = params[0];
+		if (password != this->password) {
+			sendNumericReply(client, ERR_PASSWDMISMATCH, ":Password incorrect");
+			this->clientMap.erase(client.fd);
+			close(client.fd);
+			return;
+		}
+		
+		clientObj.setPasswordAuthenticated(true);
+		return;
+	}
+
+	// Handle NICK command - set or change nickname
+	if (cmd == "NICK") {
+		if (params.size() < 1) {
+			sendNumericReply(client, ERR_NONICKNAMEGIVEN, ":No nickname given");
+			return;
+		}
+		
+		std::string nickname = params[0];
+		
+		if (!isNicknameValid(nickname)) {
+			sendNumericReply(client, ERR_ERRONEUSNICKNAME, nickname + " :Erroneous nickname");
+			return;
+		}
+		
+		if (isNicknameInUse(nickname)) {
+			sendNumericReply(client, ERR_NICKNAMEINUSE, nickname + " :Nickname is already in use");
+			return;
+		}
+
+		bool wasRegistered = clientObj.isFullyRegistered();
+		clientObj.setNickname(nickname);
+		clientObj.setNicknameSet(true);
+		
+		if (!wasRegistered && clientObj.isFullyRegistered()) {
+			sendWelcomeMessages(client);
+		}
+		return;
+	}
+
+	/*USER john 0 * :John Doe
+     ^^^^ ^ ^  ^^^^^^^^^
+            |    | |  └─ Real name (can have spaces)
+            |    | └──── Unused (always *)
+            |    └────── Mode (usually 0)
+            └─────────── Username
+
+	USER alice 0 * :Alice from Wonderland
+	USER bot123 0 * :IRC Bot v1.0
+	USER testuser 0 * :Test Account
+	USER admin 8 * :Server Administrator  ← 8 = invisible mode (rarely used)*/
+	
+	if (cmd == "USER") {
+		if (clientObj.isUserSet()) {
+			sendNumericReply(client, ERR_ALREADYREGISTRED, ":You may not reregister");
+			return;
+		}
+		
+		if (params.size() < 4) {
+			sendNumericReply(client, ERR_NEEDMOREPARAMS, "USER :Not enough parameters");
+			return;
+		}
+		
+		std::string username = params[0];
+		std::string realname = params[3];
+		
+		bool wasRegistered = clientObj.isFullyRegistered();
+		clientObj.setUsername(username);
+		clientObj.setRealname(realname);
+		clientObj.setUserSet(true);
+		
+		if (!wasRegistered && clientObj.isFullyRegistered()) {
+			sendWelcomeMessages(client);
+		}
+		return;
+	}
+
+	// Commands that require authentication
+	if (!clientObj.isPasswordAuthenticated()) {
+		sendNumericReply(client, ERR_NOTREGISTERED, ":You have not registered");
+		return;
+	}
+
+		if (cmd == WEECHAT_PING){
+			std::string response = WEECHAT_PONG + " :" + SERVER_NAME + CLDR;
+			sendMessage(client, response);
+			return ;
+		}
+		if (cmd == WEECHAT_QUIT){
+			cleanClient(client);
+			return;
+		}
+		if (cmd == WEECHAT_LIST) {
+			for (std::map<std::string, Channel>::iterator it = channels.begin(); it != channels.end(); ++it) {
+				Channel &chan = it->second;
+				std::ostringstream oss;
+				oss << chan.getMemberCount();
+			std::string memberCountStr = oss.str();
+			std::string msg = ":" + SERVER_NAME + " " + RPL_LIST + " " +
+				clientObj.getNickname() + " " +
+				chan.getName() + " " +
+				memberCountStr +
+				" :" + chan.getTopic() + CLDR;
+			sendMessage(client, msg); 
+		}
+		std::string endMsg = ":" + SERVER_NAME + " " + RPL_LISTEND + " " +
+		clientObj.getNickname() + " :End of /LIST" + CLDR;
+		sendMessage(client, endMsg);
+		return;
+	}
+	if (cmd == WEECHAT_JOIN) {
+		if (params.size() < 1) {
+			sendNumericReply(client, ERR_NEEDMOREPARAMS, "JOIN :Not enough parameters");
+			return;
+		}
+		std::string channelName = params[0];
+
+		// Check if the channel exists
+		std::map<std::string, Channel>::iterator it = channels.find(channelName);
+		if (it == channels.end()) {
+			sendNumericReply(client, ERR_NOSUCHCHANNEL, channelName + " :No such channel");
+			return;
+		}
+		Channel &chan = it->second;
+
+		// If invite-only, make sure the client is invited
+		if (chan.isInviteOnly() && !chan.isInvited(client.fd)) {
+			sendNumericReply(client, ERR_INVITEONLYCHAN, channelName + " :Cannot join channel (+i)");
+			return;
+		}
+
+		// If channel has a key (+k), check if provided
+		if (!chan.getKey().empty()) {
+			if (params.size() < 2 || params[1] != chan.getKey()) {
+				sendNumericReply(client, ERR_BADCHANNELKEY, channelName + " :Cannot join channel (+k)");
+				return;
+			}
+		}
+
+		// If user limit (+l) is set
+		if (chan.getUserLimit() > 0 && (int)chan.getMemberCount() >= chan.getUserLimit()) {
+			sendNumericReply(client, ERR_CHANNELISFULL, channelName + " :Cannot join channel (+l)");
+			return;
+		}
+
+		// Add client to channel
+		chan.addMember(client.fd);
+
+		// Broadcast JOIN to all channel members
+		std::string joinMsg = ":" + clientObj.getNickname() + " JOIN " + channelName + CLDR;
+		chan.broadcast(joinMsg);
+
+		// Send topic if any
+		std::string topic = chan.getTopic();
+		if (!topic.empty()) {
+			sendNumericReply(client, RPL_TOPIC, channelName + " :" + topic);
+		}
+
+		// Send NAMES list
+		std::string namesReply = chan.getNamesReply(clientMap);
+		sendMessage(client, namesReply);
+		return;
+	}
+	if (cmd == WEECHAT_PRIVMSG){
+		// Need at least target + message
+		if (params.size() < 2){
+			sendNumericReply(client, ERR_NEEDMOREPARAMS, "PRIVMSG :Not enough parameters");
+			return;
+		}
+		std::string channelName = params[0];
+
+		// Channel must exist
+		if (this->channels.find(channelName) == this->channels.end()){
+			sendNumericReply(client, ERR_NOSUCHCHANNEL, channelName + " :No such channel");
+			return;
+		}
+
+		// Get channel by reference
+		Channel &channel = this->channels[channelName];
+
+		// Sender must be in the channel
+		if (!channel.hasMember(client.fd)){
+			sendNumericReply(client, ERR_CANNOTSENDTOCHAN, channelName + " :Cannot send to channel");
+			return;
+		}
+
+		// Build the message (no host, as requested)
+		std::string fullMsg;
+		fullMsg  = ":" + clientObj.getNickname();
+		fullMsg += "!" + clientObj.getUsername();
+		fullMsg += " PRIVMSG " + channelName + " :" + params[1] + CLDR;
+
+		// Broadcast to everyone except sender
+		channel.broadcast(fullMsg, client.fd);
+		return;
+	}
+
+	// Unknown command
+	sendNumericReply(client, ERR_UNKNOWNCOMMAND, command + " :Unknown command");
+}
+
+/**
+ * @brief Handle a complete IRC message using proper RFC 2812 parsing
+ * 
+ * This method replaces the simple string-based handshake parsing with
+ * proper message parsing according to IRC protocol specification.
+ * 
+ * @param client The client pollfd structure
+ * @param rawMessage The raw message string (without \r\n)
+ */
+void	Server::handleMessage(pollfd& client, const std::string& rawMessage){
+	Message msg(rawMessage);
+	
+	if (!msg.isValid()){
+		sendMessage(client, MSG_SOMETHING_WENT_WRONG);
+		return;
+	}
+
+	std::string command = msg.getCommand();
+	std::vector<std::string> params = msg.getParameters();
+	processCommand(client, command, params);
 }
 
 /**
@@ -391,19 +592,20 @@ void	Server::start(void){
 			}
 		}
 		for (unsigned int i = 1; i < this->serverCapacity; i++){
-			pollfd&	client = this->clients[i];
-			if ((client.fd >=0) && (client.revents & POLLIN)){
+			pollfd& client = this->clients[i];
+			if ((client.fd >= 0) && (client.revents & POLLIN)){
 				std::string buffer = recieveData(client);
 				if (buffer.empty())
 					continue;
 				std::string& clientBuffer = this->clientBuffer[client.fd];
 				clientBuffer += buffer;
-				size_t endPosition = clientBuffer.find("\r\n");
+				size_t endPosition = clientBuffer.find(CLDR);
 				while (endPosition != std::string::npos){
-					std::string handshake = clientBuffer.substr(0, endPosition);
-					performHandshake(client, handshake);
+					std::string message = clientBuffer.substr(0, endPosition);
+					// Use RFC-compliant message handler
+					handleMessage(client, message);
 					clientBuffer.erase(0, endPosition + 2);
-					endPosition = clientBuffer.find("\r\n");
+					endPosition = clientBuffer.find(CLDR);
 				}
 			}
 		}
@@ -424,34 +626,35 @@ void	Server::start(void){
 			|_____/_/\_\____|_____|_|    |_| |___\___/|_| \_|____/ 
 */
 
-const char	*Server::InvalidPortNumberException::what() const throw(){
-	return (INVALID_PORT.c_str());
+const char* Server::InvalidPortNumberException::what() const throw() {
+    return INVALID_PORT.c_str();
 }
 
-const char	*Server::ReservedPortException::what() const throw(){
-	return (RESERVED_PORT.c_str());
+const char* Server::ReservedPortException::what() const throw() {
+    return RESERVED_PORT.c_str();
 }
 
-const char	*Server::FailedToInitServerSocketException::what() const throw(){
-	return (SOCKET_INIT_FAIL.c_str());
+const char* Server::FailedToInitServerSocketException::what() const throw() {
+    return SOCKET_INIT_FAIL.c_str();
 }
 
-const char	*Server::FailedToBindServerSocketException::what() const throw(){
-	return (SOCKET_BIND_FAIL.c_str());
+const char* Server::FailedToBindServerSocketException::what() const throw() {
+    return SOCKET_BIND_FAIL.c_str();
 }
 
-const char	*Server::FailedToListenException::what() const throw(){
-	return (SOCKET_LISTEN_FAIL.c_str());
+const char* Server::FailedToListenException::what() const throw() {
+    return SOCKET_LISTEN_FAIL.c_str();
 }
 
-const char	*Server::FailedToInitalizePollFd::what() const throw(){
-	return (POLLFD_INIT_FAIL.c_str());
+const char* Server::FailedToInitalizePollFd::what() const throw() {
+    return POLLFD_INIT_FAIL.c_str();
 }
 
-const char	*Server::FailedToMakeTheSocketNonBlockingException::what() const throw(){
-	return (SOCKET_NONBLOCKING_FAIL.c_str());
+const char* Server::FailedToMakeTheSocketNonBlockingException::what() const throw() {
+    return SOCKET_NONBLOCKING_FAIL.c_str();
 }
 
-const char	*Server::FailedToSetSocketOptionsException::what() const throw() {
-	return (SOCKET_OPTIONS_FAIL.c_str());
+const char* Server::FailedToSetSocketOptionsException::what() const throw() {
+    return SOCKET_OPTIONS_FAIL.c_str();
 }
+
