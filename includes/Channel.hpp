@@ -3,18 +3,20 @@
 /*                                                        :::      ::::::::   */
 /*   Channel.hpp                                        :+:      :+:    :+:   */
 /*                                                    +:+ +:+         +:+     */
-/*   By: ialashqa <ialashqa@student.42abudhabi.a    +#+  +:+       +#+        */
+/*   By: hamalmar <hamalmar@student.42abudhabi.a    +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2025/11/01 15:02:39 by ialashqa          #+#    #+#             */
-/*   Updated: 2025/11/01 15:02:39 by ialashqa         ###   ########.fr       */
+/*   Updated: 2025/11/24 21:49:04 by hamalmar         ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
 #ifndef CHANNEL_HPP
 # define CHANNEL_HPP
 
+# include <set>
 # include "UtilityHeaders.hpp"
 # include "Client.hpp"
+# include "UtilitiyFunctions.hpp"
 
 class Client; 
 

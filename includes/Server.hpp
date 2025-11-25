@@ -6,7 +6,7 @@
 /*   By: hamalmar <hamalmar@student.42abudhabi.a    +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2025/10/01 17:04:26 by hamalmar          #+#    #+#             */
-/*   Updated: 2025/10/11 20:17:04 by hamalmar         ###   ########.fr       */
+/*   Updated: 2025/11/25 00:42:55 by hamalmar         ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
@@ -16,7 +16,10 @@
 # include "Constants.hpp"
 # include "SocketHeaders.hpp"
 # include "UtilityHeaders.hpp"
+# include "UtilitiyFunctions.hpp"
 # include "Client.hpp"
+# include "Message.hpp"
+# include <sstream>
 # include "Channel.hpp"
 
 class Server{
@@ -71,72 +74,82 @@ class Server{
 		//This map will be used to store the client object relative to his file descriptor.
 		std::map<int, Client> clientMap;
 
+		//This map will be used to store the channels reative to the channel name.
+		std::map<std::string, Channel> channels;
+
 		//This will hold the buffer of the client when we will be using recv.
 		std::map<int, std::string> clientBuffer;
-
-		//Channels map
-		std::map<std::string, Channel> channelMap;
 
 		//This will be used for the event loop.
 		bool isRunning;
 
+		/*
+			This will hold the number of clients that the server will hold.
+			Initally it will hold NUMBER_OF_CLIENTS that is defined in the
+			constants header file.
+		*/
+		size_t	serverCapacity;
 
 		Server();
 		Server(const Server& right);
 		Server& operator=(const Server&  right);
-		void	performHandshake(pollfd& client, const std::string& handshake);
+		//Hamad Functions
+		void	closeClientConnection(pollfd& client);
+		void	rejectClient(int clientSocket);
+		bool	isNicknameTaken(std::string& nickname);
+		void	cleanClient(pollfd& client);
+
+		//Abood Functions
 		void	handleMessage(pollfd& client, const std::string& rawMessage);
-		void	processCommand(int clientFd, const std::string& command, const std::vector<std::string>& params);
-		int checkHandshake(const std::string& handshake);
-		std::string constructHandshake(int handshakeFlag);
-		std::string	recieveData(pollfd& client);	
-	public:
-		~Server();
-		Server(int port, std::string& password);
-		void	start(void);
-		class InvalidPortNumberException: public std::exception{
-			public:
-				const char	*what() const throw();
-		};
+		void	processCommand(pollfd& client, const std::string& command, const std::vector<std::string>& params);
+		void	sendNumericReply(pollfd& client, const std::string& numeric, const std::string& message);
+		void	sendWelcomeMessages(pollfd& client);
+		bool	isNicknameValid(const std::string& nickname);
+		bool	isNicknameInUse(const std::string& nickname);
 
-		class PasswordCannotBeEmptyException: public std::exception{
-			public:
-				const char	*what() const throw();
-		};
+		public:
+			~Server();
+			Server(int port, const std::string& password);
+			void	start(void);
 
-		class FailedToInitServerSocketException: public std::exception{
-			public:
-				const char	*what() const throw();
-		};
+			class InvalidPortNumberException: public std::exception{
+				public:
+					const char	*what() const throw();
+			};
 
-		class FailedToBindServerSocketException: public std::exception{
-			public:
-				const char	*what() const  throw();
-		};
+			class FailedToInitServerSocketException: public std::exception{
+				public:
+					const char	*what() const throw();
+			};
 
-		class FailedToListenException: public std::exception{
-			public:
-				const char	*what() const throw();
-		};
+			class FailedToBindServerSocketException: public std::exception{
+				public:
+					const char	*what() const  throw();
+			};
 
-		class ReservedPortException: public std::exception{
-			public:
-				const char	*what() const throw();
-		};
+			class FailedToListenException: public std::exception{
+				public:
+					const char	*what() const throw();
+			};
 
-		class FailedToInitalizePollFd: public std::exception{
-			public:
-				const char	*what() const throw();
-		};
-		class FailedToMakeTheSocketNonBlockingException: public std::exception{
-			public:
-				const char	*what() const throw();
-		};
+			class ReservedPortException: public std::exception{
+				public:
+					const char	*what() const throw();
+			};
 
-		class FailedToSetSocketOptionsException: public std::exception{
-			public:
-				const char	*what() const throw();
-		};
+			class FailedToInitalizePollFd: public std::exception{
+				public:
+					const char	*what() const throw();
+			};
+			class FailedToMakeTheSocketNonBlockingException: public std::exception{
+				public:
+					const char	*what() const throw();
+			};
+
+			class FailedToSetSocketOptionsException: public std::exception{
+				public:
+					const char	*what() const throw();
+			};
 };
 
 #endif

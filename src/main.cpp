@@ -17,11 +17,11 @@ int main(int ac, char **av){
         std::cerr << "Input must be: ./ircserv [port] [password]" << std::endl;
         return (2);
     }
-    Server *HAIServer;
+    Server *HAIServer = NULL;
         /**
          * Why HAI?
          * (H)amad
-         * (Abdullah)
+         * (A)bdullah
          * (I)smail
          * -Hamad
          */

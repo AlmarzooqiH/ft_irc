@@ -18,18 +18,41 @@ class Client{
 	private:
 		std::string username;
 		std::string nickname;
+		std::string realname;
+		std::string hostname;
 		
-		public:
+		// Authentication state flags
+		bool passwordAuthenticated;
+		bool nicknameSet;
+		bool userSet;
+
+	public:
 		Client();
 		Client(const Client& right);
 		Client& operator=(const Client& right);
 		~Client();
+
+		// Getters
 		std::string	getNickname(void) const;
 		std::string	getUsername(void) const;
+		std::string getRealname(void) const;
+		std::string getHostname(void) const;
 
-		
-		void	setNickname(std::string &nNickname);
-		void	setUsername(std::string &nUsername);
+		// Setters
+		void	setNickname(const std::string &nNickname);
+		void	setUsername(const std::string &nUsername);
+		void	setRealname(const std::string &nRealname);
+		void	setHostname(const std::string &nHostname);
+
+		// Authentication state
+		void	setPasswordAuthenticated(bool authenticated);
+		void	setNicknameSet(bool set);
+		void	setUserSet(bool set);
+
+		bool	isPasswordAuthenticated(void) const;
+		bool	isNicknameSet(void) const;
+		bool	isUserSet(void) const;
+		bool	isFullyRegistered(void) const;
 
 };
 #endif

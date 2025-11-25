@@ -6,14 +6,14 @@
 /*   By: hamalmar <hamalmar@student.42abudhabi.a    +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2025/10/01 17:13:52 by hamalmar          #+#    #+#             */
-/*   Updated: 2025/10/04 22:47:09 by hamalmar         ###   ########.fr       */
+/*   Updated: 2025/10/16 16:54:24 by hamalmar         ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
 #ifndef SOCKETHEADERS_HPP
 # define SOCKETHEADERS_HPP
 
-/*
+/**
  Socket programming includes. If something please add it or inform me.
  @author Hamad :P
 */

@@ -3,10 +3,10 @@
 /*                                                        :::      ::::::::   */
 /*   Channel.cpp                                        :+:      :+:    :+:   */
 /*                                                    +:+ +:+         +:+     */
-/*   By: ialashqa <ialashqa@student.42abudhabi.a    +#+  +:+       +#+        */
+/*   By: hamalmar <hamalmar@student.42abudhabi.a    +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2025/11/01 14:07:54 by ialashqa          #+#    #+#             */
-/*   Updated: 2025/11/01 14:07:54 by ialashqa         ###   ########.fr       */
+/*   Updated: 2025/11/24 21:47:56 by hamalmar         ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
@@ -145,14 +145,14 @@ size_t Channel::getOperatorCount() const {
 
 void Channel::broadcast(const std::string& message) {
     for (std::set<int>::iterator it = channelMembers.begin(); it != channelMembers.end(); ++it) {
-        send(*it, message.c_str(), message.length(), MSG_DONTWAIT);
+        channelSendMessage(*it, message.c_str());
     }
 }
 
 void Channel::broadcast(const std::string& message, int excludeFd) {
     for (std::set<int>::iterator it = channelMembers.begin(); it != channelMembers.end(); ++it) {
         if (*it != excludeFd)
-            send(*it, message.c_str(), message.length(), MSG_DONTWAIT);
+        channelSendMessage(*it, message.c_str());
     }
 }
 
