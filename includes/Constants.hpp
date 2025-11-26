@@ -3,10 +3,10 @@
 /*                                                        :::      ::::::::   */
 /*   Constants.hpp                                      :+:      :+:    :+:   */
 /*                                                    +:+ +:+         +:+     */
-/*   By: hamalmar <hamalmar@student.42abudhabi.a    +#+  +:+       +#+        */
+/*   By: ialashqa <ialashqa@student.42abudhabi.a    +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2025/10/01 16:38:26 by hamalmar          #+#    #+#             */
-/*   Updated: 2025/11/25 00:26:09 by hamalmar         ###   ########.fr       */
+/*   Updated: 2025/11/26 17:13:28 by ialashqa         ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
@@ -123,6 +123,7 @@
 	const std::string RPL_MYINFO("004");
 	const std::string RPL_LIST("322");
 	const std::string RPL_LISTEND("323");
+	const std::string RPL_NOTOPIC("331");
 	const std::string RPL_TOPIC("332");
 	const std::string RPL_TOPICSET("333");
 

@@ -3,10 +3,10 @@
 /*                                                        :::      ::::::::   */
 /*   Server.cpp                                         :+:      :+:    :+:   */
 /*                                                    +:+ +:+         +:+     */
-/*   By: hamalmar <hamalmar@student.42abudhabi.a    +#+  +:+       +#+        */
+/*   By: ialashqa <ialashqa@student.42abudhabi.a    +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2025/10/01 23:00:19 by hamalmar          #+#    #+#             */
-/*   Updated: 2025/11/25 00:53:57 by hamalmar         ###   ########.fr       */
+/*   Updated: 2025/11/26 17:02:17 by ialashqa         ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
@@ -518,6 +518,66 @@ void	Server::processCommand(pollfd& client, const std::string& command, const st
 		channel.broadcast(fullMsg, client.fd);
 		return;
 	}
+	// ============================================
+    // ADD TOPIC COMMAND HERE
+    // ============================================
+	if (cmd == "TOPIC") {
+        // Need at least channel name
+        if (params.size() < 1) {
+            sendNumericReply(client, ERR_NEEDMOREPARAMS, "TOPIC :Not enough parameters");
+            return;
+        }
+
+        std::string channelName = params[0];
+	        // Check if channel exists
+        std::map<std::string, Channel>::iterator it = channels.find(channelName);
+        if (it == channels.end()) {
+            sendNumericReply(client, ERR_NOSUCHCHANNEL, channelName + " :No such channel");
+            return;
+        }
+
+        Channel& chan = it->second;
+
+        // Client must be in the channel
+        if (!chan.hasMember(client.fd)) {
+            sendNumericReply(client, ERR_NOTONCHANNEL, channelName + " :You're not on that channel");
+            return;
+        }
+
+        // If only channel name provided: VIEW topic
+        if (params.size() == 1) {
+            std::string topic = chan.getTopic();
+            
+            if (topic.empty()) {
+                // No topic set (331)
+                sendNumericReply(client, RPL_NOTOPIC, channelName + " :No topic is set");
+            } else {
+                // Send topic (332)
+                sendNumericReply(client, RPL_TOPIC, channelName + " :" + topic);
+            }
+            return;
+        }
+
+        // If topic provided: SET topic
+        std::string newTopic = params[1];
+
+        // Check if topic is restricted (+t mode)
+        if (chan.isTopicRestricted() && !chan.isOperator(client.fd)) {
+            sendNumericReply(client, ERR_CHANOPRIVSNEEDED, channelName + " :You're not channel operator");
+            return;
+        }
+
+        // Set the new topic
+        chan.setTopic(newTopic);
+
+        // Broadcast topic change to all channel members
+        std::string topicMsg = ":" + clientObj.getNickname() + 
+                               " TOPIC " + channelName + 
+                               " :" + newTopic + CLDR;
+        chan.broadcast(topicMsg);
+
+        return;
+    }
 
 	// Unknown command
 	sendNumericReply(client, ERR_UNKNOWNCOMMAND, command + " :Unknown command");
