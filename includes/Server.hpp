@@ -92,9 +92,11 @@ class Server{
 	void	sendNumericReply(int clientFd, const std::string& numeric, const std::string& message);
 	void	sendWelcomeMessages(int clientFd);
 	bool	isNicknameValid(const std::string& nickname);
-	bool	isNicknameInUse(const std::string& nickname);	public:
-		~Server();
-		Server(int port, std::string& password);
+	bool	isNicknameInUse(const std::string& nickname);
+
+public:
+	~Server();
+	Server(int port, std::string& password);
 		void	start(void);
 		class InvalidPortNumberException: public std::exception{
 			public:

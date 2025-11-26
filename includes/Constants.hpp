@@ -28,6 +28,8 @@
 	const std::string INITALIZAE_SERVER("\033[1;33mAttempting to Initalize the Server\033[0m"); 
 	const std::string SERVER_INITALIZED("\033[1;32mServer has been initalized successfully!\033[0m");
 	const std::string SERVER_START_AND_ACCEPT("\033[1;33mAttempting to start the server and accept connections\033[0m");
+	const std::string SERVER_RUNNING("\033[1;32m✓ Server is running and waiting for connections...\033[0m");
+	const std::string SERVER_READY("\033[1;32m✓ Press Ctrl+C to stop the server\033[0m");
 	const std::string SERVER_GOODBYE("\033[1;32mThank you for using HAI Server!\033[0m"); 
 
 	//Client messages constants

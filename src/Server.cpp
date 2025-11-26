@@ -195,15 +195,23 @@ void	Server::performHandshake(pollfd& client, const std::string& handshake){
  * @param rawMessage The raw message string (without \r\n)
  */
 void	Server::handleMessage(pollfd& client, const std::string& rawMessage){
+	std::cout << "DEBUG: Received message: [" << rawMessage << "]" << std::endl;
+	
 	Message msg(rawMessage);
 	
 	if (!msg.isValid()){
+		std::cout << "DEBUG: Message parsing FAILED" << std::endl;
 		send(client.fd, CLIENT_SOMETHING_WENT_WRONG.c_str(), CLIENT_SOMETHING_WENT_WRONG.length(), MSG_DONTWAIT);
 		return;
 	}
 
 	std::string command = msg.getCommand();
 	std::vector<std::string> params = msg.getParameters();
+	
+	std::cout << "DEBUG: Command: [" << command << "], Params count: " << params.size() << std::endl;
+	if (params.size() > 0) {
+		std::cout << "DEBUG: First param: [" << params[0] << "]" << std::endl;
+	}
 
 	processCommand(client.fd, command, params);
 }
@@ -223,7 +231,6 @@ void	Server::processCommand(int clientFd, const std::string& command, const std:
 
 	Client& client = this->clientMap[clientFd];
 
-	// Handle CAP command (client capability negotiation)
 	if (cmd == "CAP") {
 		if (params.size() > 0) {
 			std::string subCmd = params[0];
@@ -239,31 +246,51 @@ void	Server::processCommand(int clientFd, const std::string& command, const std:
 		return;
 	}
 
-	// Handle PASS command - must be first command before registration
 	if (cmd == "PASS") {
+		std::cout << "DEBUG: Processing PASS command" << std::endl;
+		std::cout << "DEBUG: Server password: [" << this->password << "]" << std::endl;
+		
 		if (client.isFullyRegistered()) {
 			sendNumericReply(clientFd, ERR_ALREADYREGISTRED, ":You may not reregister");
 			return;
 		}
 		
 		if (params.size() < 1) {
+			std::cout << "DEBUG: Not enough parameters for PASS" << std::endl;
 			sendNumericReply(clientFd, ERR_NEEDMOREPARAMS, "PASS :Not enough parameters");
 			return;
 		}
 		
 		std::string password = params[0];
+		std::cout << "DEBUG: Client password: [" << password << "]" << std::endl;
+		
 		if (password != this->password) {
+			std::cout << "DEBUG: Password MISMATCH - sending error and closing connection" << std::endl;
 			sendNumericReply(clientFd, ERR_PASSWDMISMATCH, ":Password incorrect");
+			
+			usleep(100000);
+			
 			this->clientMap.erase(clientFd);
+			this->clientBuffer.erase(clientFd);
+			
+			for (int i = 1; i < NUMBER_OF_CLIENTS; i++) {
+				if (this->clients[i].fd == clientFd) {
+					this->clients[i].fd = -1;
+					this->clients[i].events = 0;
+					this->clients[i].revents = 0;
+					break;
+				}
+			}
+			
 			close(clientFd);
 			return;
 		}
 		
+		std::cout << "DEBUG: Password CORRECT - client authenticated" << std::endl;
 		client.setPasswordAuthenticated(true);
 		return;
 	}
 
-	// Handle NICK command - set or change nickname
 	if (cmd == "NICK") {
 		if (params.size() < 1) {
 			sendNumericReply(clientFd, ERR_NONICKNAMEGIVEN, ":No nickname given");
@@ -292,18 +319,6 @@ void	Server::processCommand(int clientFd, const std::string& command, const std:
 		return;
 	}
 
-	/*USER john 0 * :John Doe
-     ^^^^ ^ ^  ^^^^^^^^^
-            |    | |  └─ Real name (can have spaces)
-            |    | └──── Unused (always *)
-            |    └────── Mode (usually 0)
-            └─────────── Username
-
-	USER alice 0 * :Alice from Wonderland
-	USER bot123 0 * :IRC Bot v1.0
-	USER testuser 0 * :Test Account
-	USER admin 8 * :Server Administrator  ← 8 = invisible mode (rarely used)*/
-	
 	if (cmd == "USER") {
 		if (client.isUserSet()) {
 			sendNumericReply(clientFd, ERR_ALREADYREGISTRED, ":You may not reregister");
@@ -354,10 +369,10 @@ void	Server::start(void){
 	while (this->isRunning){
 		this->pollManager = poll(this->clients, NUMBER_OF_CLIENTS, MS_TIMEOUT);
 		if (this->pollManager < 0 ){
-			errorLogFile << "Something went wrong" << std::endl;
+			errorLogFile << "Poll error occurred" << std::endl;
 			continue;
 		} else if (this->pollManager == 0){
-			errorLogFile << "Poll timeout" << std::endl;
+			// Poll timeout - this is normal, just means no activity
 			continue;
 		}
 		if (this->clients[0].revents & POLLIN){
@@ -385,18 +400,43 @@ void	Server::start(void){
 					errorLogFile << "Failed to recieve data from client(" << client.fd << ")" << std::endl;
 					continue;
 				}
+				
+				std::cout << "DEBUG: Received raw data: [" << buffer << "]" << std::endl;
+				std::cout << "DEBUG: Buffer length: " << buffer.length() << std::endl;
+				
 			std::string& clientBuffer = this->clientBuffer[client.fd];
 			clientBuffer += buffer;
+			
+			std::cout << "DEBUG: Client buffer now: [" << clientBuffer << "]" << std::endl;
+			
 			size_t endPosition = clientBuffer.find("\r\n");
+			size_t endPositionLF = clientBuffer.find("\n");
+			bool useCRLF = true;
+			
+			if (endPosition == std::string::npos && endPositionLF != std::string::npos) {
+				endPosition = endPositionLF;
+				useCRLF = false;
+			}
+			
+			std::cout << "DEBUG: Looking for line ending, found at position: " << endPosition << std::endl;
+			
 			while (endPosition != std::string::npos){
 				std::string message = clientBuffer.substr(0, endPosition);
 				
-				// Use the new RFC 2812 compliant message handler
+				std::cout << "DEBUG: Extracted message: [" << message << "]" << std::endl;
+				
 				handleMessage(client, message);
-				// performHandshake(client, message);
 
-				clientBuffer.erase(0, endPosition + 2);
+				clientBuffer.erase(0, endPosition + (useCRLF ? 2 : 1));
+				
 				endPosition = clientBuffer.find("\r\n");
+				endPositionLF = clientBuffer.find("\n");
+				useCRLF = true;
+				
+				if (endPosition == std::string::npos && endPositionLF != std::string::npos) {
+					endPosition = endPositionLF;
+					useCRLF = false;
+				}
 			}
 				logFile << buffer << std::endl;
 			}
