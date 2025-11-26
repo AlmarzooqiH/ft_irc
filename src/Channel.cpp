@@ -3,10 +3,10 @@
 /*                                                        :::      ::::::::   */
 /*   Channel.cpp                                        :+:      :+:    :+:   */
 /*                                                    +:+ +:+         +:+     */
-/*   By: hamalmar <hamalmar@student.42abudhabi.a    +#+  +:+       +#+        */
+/*   By: ialashqa <ialashqa@student.42abudhabi.a    +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2025/11/01 14:07:54 by ialashqa          #+#    #+#             */
-/*   Updated: 2025/11/24 21:47:56 by hamalmar         ###   ########.fr       */
+/*   Updated: 2025/11/26 16:31:39 by ialashqa         ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
@@ -54,8 +54,8 @@ Channel& Channel::operator=(const Channel& right){
         this->createdAt = right.createdAt;
         this->invitedUsers = right.invitedUsers;
         this->channelMembers = right.channelMembers;
-        this->inviteOnly = right.inviteOnly;           // FIXED: Order now matches header
-        this->topicRestricted = right.topicRestricted; // FIXED: Order now matches header
+        this->inviteOnly = right.inviteOnly;           
+        this->topicRestricted = right.topicRestricted;
         this->key = right.key;
         this->userLimit = right.userLimit;
         this->operators = right.operators;
@@ -69,10 +69,20 @@ Channel::~Channel(){}
 /*            Member Management                   */
 /* ---------------------------------------------- */
 
+/**
+ * @brief Add a new member to the channel.
+ * @param clientFd The file descriptor of the client to add.
+ * @note add client fd to channelMembers set (list).
+ */
 void Channel::addMember(int clientFd) {
     channelMembers.insert(clientFd);
 }
 
+/**
+ * @brief Remove a member from the channel + Auto-promote operator.
+ * @param clientFd The file descriptor of the client to remove.
+ * @note If no operators remain in channel, the first member is promoted to operator.
+ */
 void Channel::removeMember(int clientFd) {
     channelMembers.erase(clientFd);
     operators.erase(clientFd);
@@ -85,14 +95,26 @@ void Channel::removeMember(int clientFd) {
     }
 }
 
+/**
+ * @brief Check if a specific client (fd) is in the channel.
+ * @param clientFd The file descriptor of the client to check.
+ * @return True if in the channel, false otherwise.
+ */
 bool Channel::hasMember(int clientFd) const {
-    return channelMembers.find(clientFd) != channelMembers.end();
+    std::set<int>::const_iterator it = channelMembers.find(clientFd);
+    bool found = (it != channelMembers.end());
+    return found;
 }
 
+//Getter for private variable channelMembers.
 const std::set<int>& Channel::getMembers() const {
     return channelMembers;
 }
 
+/**
+ * @brief Get the count of members in the channel.
+ * @return Number of members.
+ */
 size_t Channel::getMemberCount() const {
     return channelMembers.size();
 }
@@ -101,14 +123,29 @@ size_t Channel::getMemberCount() const {
 /*         Invitation Management                  */
 /* ---------------------------------------------- */
 
+/**
+ * @brief Invite a user to the channel.
+ * @param clientFd The file descriptor of the client to invite.
+ * @note Adds client fd to invitedUsers set (list).
+ */
 void Channel::inviteUser(int clientFd) {
     invitedUsers.insert(clientFd);
 }
 
+/**
+ * @brief Check if a user is invited to the channel.
+ * @param clientFd The file descriptor of the client to check.
+ * @return True if invited, false otherwise.
+ */
 bool Channel::isInvited(int clientFd) const {
     return invitedUsers.find(clientFd) != invitedUsers.end();
 }
 
+/**
+ * @brief Remove an invitation for a user.
+ * @param clientFd The file descriptor of the client to remove invitation for.
+ * @note Removes client fd from invitedUsers set (list).
+ */
 void Channel::removeInvite(int clientFd) {
     invitedUsers.erase(clientFd);
 }
@@ -143,16 +180,40 @@ size_t Channel::getOperatorCount() const {
 /*            Broadcasting Messages               */
 /* ---------------------------------------------- */
 
+/**
+ * @brief Sends a message to every member in the channel.
+ * @param message The message to broadcast.
+ */
 void Channel::broadcast(const std::string& message) {
-    for (std::set<int>::iterator it = channelMembers.begin(); it != channelMembers.end(); ++it) {
-        channelSendMessage(*it, message.c_str());
+    std::set<int>::iterator it = channelMembers.begin();
+    std::set<int>::iterator end = channelMembers.end();
+
+    while (it != end) {
+        int clientfd = *it;
+        const char *msg = message.c_str();
+        channelSendMessage(clientfd, msg);
+        ++it;
     }
 }
 
+
+/**
+ * @brief Sends a message to every member in the channel except one (the sender obv)
+ * @param message The message to broadcast.
+ * @param excludeFd The file descriptor of the client to exclude.
+ */
 void Channel::broadcast(const std::string& message, int excludeFd) {
-    for (std::set<int>::iterator it = channelMembers.begin(); it != channelMembers.end(); ++it) {
-        if (*it != excludeFd)
-        channelSendMessage(*it, message.c_str());
+    std::set<int>::iterator it = channelMembers.begin();
+    std::set<int>::iterator end = channelMembers.end();
+
+    while (it != end) {
+        int clientfd = *it;
+
+        if (clientfd != excludeFd) {
+            const char *msg = message.c_str();
+            channelSendMessage(clientfd, msg);
+        }
+        ++it;
     }
 }
 
@@ -160,15 +221,21 @@ void Channel::broadcast(const std::string& message, int excludeFd) {
 /*         Channel Info & Replies                 */
 /* ---------------------------------------------- */
 
+/**
+ * @brief Generate the list of usernames with operators marked with @ prefix.
+ * @param clientMap A map of client FDs with their Client objects with nicknames.
+ * @return The formatted NAMES reply string.
+ * @note Operators are prefixed with '@' in the reply e.g. @bob.
+ */
 std::string Channel::getNamesReply(const std::map<int, Client>& clientMap) const {
     std::string names;
     
-    // Operators first with @
+    // Loop through all operators first
     for (std::set<int>::const_iterator it = operators.begin(); it != operators.end(); ++it) {
         std::map<int, Client>::const_iterator clientIt = clientMap.find(*it);
         if (clientIt != clientMap.end()) {
             if (!names.empty()) names += " ";
-            names += "@" + clientIt->second.getNickname();
+            names += "@" + clientIt->second.getNickname(); // give nickname with @ prefix for ops
         }
     }
     
@@ -180,7 +247,7 @@ std::string Channel::getNamesReply(const std::map<int, Client>& clientMap) const
         std::map<int, Client>::const_iterator clientIt = clientMap.find(*it);
         if (clientIt != clientMap.end()) {
             if (!names.empty()) names += " ";
-            names += clientIt->second.getNickname();
+            names += clientIt->second.getNickname(); // give nickname without @ prefix for reg
         }
     }
     
