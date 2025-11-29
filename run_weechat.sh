@@ -4,7 +4,7 @@
 docker build -t weechat-irc .
 
 # Run WeeChat in a container
-# The container will connect to the host's IRC server
+# On Mac, use host.docker.internal to reach the host machine
 docker run -it --rm \
-    --network host \
+    --add-host=irc.local:host-gateway \
     weechat-irc
