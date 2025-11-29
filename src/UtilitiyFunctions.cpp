@@ -3,10 +3,10 @@
 /*                                                        :::      ::::::::   */
 /*   UtilitiyFunctions.cpp                              :+:      :+:    :+:   */
 /*                                                    +:+ +:+         +:+     */
-/*   By: hamalmar <hamalmar@student.42abudhabi.a    +#+  +:+       +#+        */
+/*   By: ialashqa <ialashqa@student.42abudhabi.a    +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2025/11/24 21:42:25 by hamalmar          #+#    #+#             */
-/*   Updated: 2025/11/24 21:46:54 by hamalmar         ###   ########.fr       */
+/*   Updated: 2025/11/29 20:56:16 by ialashqa         ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 

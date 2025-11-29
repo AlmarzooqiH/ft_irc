@@ -466,9 +466,16 @@ void	Server::processCommand(pollfd& client, const std::string& command, const st
 			sendNumericReply(client, ERR_CHANNELISFULL, channelName + " :Cannot join channel (+l)");
 			return;
 		}
-
+		
 		// Add client to channel
 		chan.addMember(client.fd);
+
+		// If this is the first member, make them operator
+		if (chan.getMemberCount() == 1) {
+			chan.addOperator(client.fd);
+			std::string opMsg = ":" + SERVER_NAME + " MODE " + channelName + " +o " + clientObj.getNickname() + CLDR;
+    		sendMessage(client, opMsg);
+		}
 
 		// Broadcast JOIN to all channel members
 		std::string joinMsg = ":" + clientObj.getNickname() + " JOIN " + channelName + CLDR;
@@ -519,9 +526,9 @@ void	Server::processCommand(pollfd& client, const std::string& command, const st
 		return;
 	}
 	// ============================================
-    // ADD TOPIC COMMAND HERE
+    //  TOPIC COMMAND 
     // ============================================
-	if (cmd == "TOPIC") {
+	if (cmd == WEECHAT_TOPIC) {
         // Need at least channel name
         if (params.size() < 1) {
             sendNumericReply(client, ERR_NEEDMOREPARAMS, "TOPIC :Not enough parameters");
@@ -529,7 +536,7 @@ void	Server::processCommand(pollfd& client, const std::string& command, const st
         }
 
         std::string channelName = params[0];
-	        // Check if channel exists
+	        // Check if  exists
         std::map<std::string, Channel>::iterator it = channels.find(channelName);
         if (it == channels.end()) {
             sendNumericReply(client, ERR_NOSUCHCHANNEL, channelName + " :No such channel");
@@ -538,7 +545,7 @@ void	Server::processCommand(pollfd& client, const std::string& command, const st
 
         Channel& chan = it->second;
 
-        // Client must be in the channel
+        // Client must be in thechannel channel
         if (!chan.hasMember(client.fd)) {
             sendNumericReply(client, ERR_NOTONCHANNEL, channelName + " :You're not on that channel");
             return;
@@ -578,6 +585,84 @@ void	Server::processCommand(pollfd& client, const std::string& command, const st
 
         return;
     }
+	// ============================================
+	//  KICK COMMAND 
+	// ============================================
+
+	if (cmd == WEECHAT_KICK) {
+    // KICK #channel nickname :reason
+    // Need at least channel and nickname
+    if (params.size() < 2) {
+        sendNumericReply(client, ERR_NEEDMOREPARAMS, "KICK :Not enough parameters");
+        return;
+    }
+
+    std::string channelName = params[0];
+    std::string targetNick = params[1];
+    std::string reason = "No reason given";
+    
+    if (params.size() >= 3) {
+        reason = params[2];
+    }
+
+    // Check if channel exists
+    std::map<std::string, Channel>::iterator it = channels.find(channelName);
+    if (it == channels.end()) {
+        sendNumericReply(client, ERR_NOSUCHCHANNEL, channelName + " :No such channel");
+        return;
+    }
+
+    Channel& chan = it->second;
+
+    // Kicker must be in the channel
+    if (!chan.hasMember(client.fd)) {
+        sendNumericReply(client, ERR_NOTONCHANNEL, channelName + " :You're not on that channel");
+        return;
+    }
+
+    // Kicker must be a channel operator
+    if (!chan.isOperator(client.fd)) {
+        sendNumericReply(client, ERR_CHANOPRIVSNEEDED, channelName + " :You're not channel operator");
+        return;
+    }
+
+    // Find the target client by nickname
+    int targetFd = -1;
+    for (std::map<int, Client>::iterator clientIt = clientMap.begin(); 
+         clientIt != clientMap.end(); ++clientIt) {
+        if (clientIt->second.getNickname() == targetNick) {
+            targetFd = clientIt->first;
+            break;
+        }
+    }
+
+    // Target must exist
+    if (targetFd == -1) {
+        sendNumericReply(client, ERR_NOSUCHNICK, targetNick + " :No such nick/channel");
+        return;
+    }
+
+    // Target must be in the channel
+    if (!chan.hasMember(targetFd)) {
+        sendNumericReply(client, ERR_USERNOTINCHANNEL, targetNick + " " + channelName + " :They aren't on that channel");
+        return;
+    }
+
+    // Build KICK message: :kicker!user KICK #channel target :reason
+    std::string kickMsg = ":" + clientObj.getNickname() + 
+                          "!" + clientObj.getUsername() + 
+                          "  KICK " + channelName + 
+                          " " + targetNick + 
+                          " :" + reason + CLDR;
+
+    // Broadcast KICK to everyone in the channel (including the kicked user)
+    chan.broadcast(kickMsg);
+
+    // Remove the target from the channel
+    chan.removeMember(targetFd);
+
+    return;
+	}
 
 	// Unknown command
 	sendNumericReply(client, ERR_UNKNOWNCOMMAND, command + " :Unknown command");
@@ -593,6 +678,7 @@ void	Server::processCommand(pollfd& client, const std::string& command, const st
  * @param rawMessage The raw message string (without \r\n)
  */
 void	Server::handleMessage(pollfd& client, const std::string& rawMessage){
+	std::cout << rawMessage << std::endl;
 	Message msg(rawMessage);
 	
 	if (!msg.isValid()){

@@ -38,13 +38,6 @@
 	*/
 	const int DEFAULT_FLAG_SEND = 0;
 
-	/**
-		If the user want to become an operator he will have
-		to enter this password when executing
-		/mode channel +o nickname
-	*/
-	const std::string OPERATOR_PASSWORD("hehe@1234");
-
 	//Server messages constants
 	const std::string INITALIZAE_SERVER("\033[1;33mAttempting to Initalize the Server\033[0m"); 
 	const std::string SERVER_INITALIZED("\033[1;32mServer has been initalized successfully!\033[0m");
@@ -90,6 +83,8 @@
 	const std::string WEECHAT_JOIN("JOIN");
 	const std::string WEECHAT_PRIVMSG("PRIVMSG");
 	const std::string WEECHAT_CHANNEL_PREFIX("&#!+"); //According to the protocol manual
+	const std::string WEECHAT_TOPIC("TOPIC");
+	const std::string WEECHAT_KICK("KICK");
 
 	enum WEECHAT_HANDSHAKE {
 		PASSWORD = 1 << 0,
