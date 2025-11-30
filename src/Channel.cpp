@@ -83,7 +83,7 @@ void Channel::addMember(int clientFd) {
  * @param clientFd The file descriptor of the client to remove.
  * @note If no operators remain in channel, the first member is promoted to operator.
  */
-void Channel::removeMember(int clientFd) {
+int Channel::removeMember(int clientFd) {
     channelMembers.erase(clientFd);
     operators.erase(clientFd);
     invitedUsers.erase(clientFd);
@@ -92,7 +92,9 @@ void Channel::removeMember(int clientFd) {
     if (operators.empty() && !channelMembers.empty()) {
         int newOp = *channelMembers.begin();
         addOperator(newOp);
+        return newOp;  // Return the new operator's fd
     }
+    return -1;  // No promotion happened
 }
 
 /**
@@ -251,7 +253,16 @@ std::string Channel::getNamesReply(const std::map<int, Client>& clientMap) const
         }
     }
     
-    return names;
+    // Build the full NAMES reply with proper format
+    std::string reply;
+    
+    // RPL_NAMREPLY (353): :server 353 nick = #channel :names
+    reply += ":" + SERVER_NAME + " 353 = " + channelName + " :" + names + CLDR;
+    
+    // RPL_ENDOFNAMES (366): :server 366 nick #channel :End of /NAMES list
+    reply += ":" + SERVER_NAME + " 366 " + channelName + " :End of /NAMES list" + CLDR;
+    
+    return reply;
 }
 
 std::string Channel::getName() const {

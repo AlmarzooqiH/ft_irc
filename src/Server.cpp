@@ -270,7 +270,34 @@ void	Server::sendNumericReply(pollfd& client, const std::string& numeric, const 
 
 void Server::cleanClient(pollfd& client) {
     if (client.fd >= 0) {
-		std::cout << this->clientMap[client.fd].getNickname() << " Has disconnected!" << std::endl;
+        std::string nickname = this->clientMap[client.fd].getNickname();
+        std::cout << nickname << " Has disconnected!" << std::endl;
+        
+        // Remove from all channels and handle auto-promotion
+        for (std::map<std::string, Channel>::iterator it = channels.begin(); 
+             it != channels.end(); ++it) {
+            Channel& chan = it->second;
+            if (chan.hasMember(client.fd)) {
+                // Broadcast QUIT to channel members
+                std::string quitMsg = ":" + nickname + " QUIT :Client disconnected" + CLDR;
+                chan.broadcast(quitMsg, client.fd);
+                
+                // Remove and check for auto-promotion
+                int newOpFd = chan.removeMember(client.fd);
+                
+                // If someone was auto-promoted, broadcast MODE +o
+                if (newOpFd != -1) {
+                    std::map<int, Client>::iterator newOpIt = clientMap.find(newOpFd);
+                    if (newOpIt != clientMap.end()) {
+                        std::string newOpNick = newOpIt->second.getNickname();
+                        std::string modeMsg = ":" + SERVER_NAME + " MODE " + it->first + 
+                                              " +o " + newOpNick + CLDR;
+                        chan.broadcast(modeMsg);
+                    }
+                }
+            }
+        }
+        
         clientMap.erase(client.fd);
         clientBuffer.erase(client.fd);
         close(client.fd);
@@ -577,11 +604,12 @@ void	Server::processCommand(pollfd& client, const std::string& command, const st
         // Set the new topic
         chan.setTopic(newTopic);
 
-        // Broadcast topic change to all channel members
+        // Broadcast topic change to all channel members (including the setter)
         std::string topicMsg = ":" + clientObj.getNickname() + 
+                               "!" + clientObj.getUsername() +
                                " TOPIC " + channelName + 
                                " :" + newTopic + CLDR;
-        chan.broadcast(topicMsg);
+        chan.broadcast(topicMsg);  // Broadcast to EVERYONE
 
         return;
     }
@@ -651,18 +679,88 @@ void	Server::processCommand(pollfd& client, const std::string& command, const st
     // Build KICK message: :kicker!user KICK #channel target :reason
     std::string kickMsg = ":" + clientObj.getNickname() + 
                           "!" + clientObj.getUsername() + 
-                          "  KICK " + channelName + 
+                          " KICK " + channelName + 
                           " " + targetNick + 
                           " :" + reason + CLDR;
 
     // Broadcast KICK to everyone in the channel (including the kicked user)
     chan.broadcast(kickMsg);
 
-    // Remove the target from the channel
-    chan.removeMember(targetFd);
+    // Remove the target from the channel and check for auto-promotion
+    int newOpFd = chan.removeMember(targetFd);
+    
+    // If someone was auto-promoted, broadcast MODE +o
+    if (newOpFd != -1) {
+        std::map<int, Client>::iterator newOpIt = clientMap.find(newOpFd);
+        if (newOpIt != clientMap.end()) {
+            std::string newOpNick = newOpIt->second.getNickname();
+            std::string modeMsg = ":" + SERVER_NAME + " MODE " + channelName + 
+                                  " +o " + newOpNick + CLDR;
+            chan.broadcast(modeMsg);
+        }
+    }
 
     return;
 	}
+	// ============================================
+    //  PART COMMAND 
+    // ============================================
+    if (cmd == WEECHAT_PART) {
+        // PART #channel :reason
+        // Need at least channel name
+        if (params.size() < 1) {
+            sendNumericReply(client, ERR_NEEDMOREPARAMS, "PART :Not enough parameters");
+            return;
+        }
+
+        std::string channelName = params[0];
+        std::string reason = "Leaving";
+        
+        // Optional reason parameter
+        if (params.size() >= 2) {
+            reason = params[1];
+        }
+
+        // Check if channel exists
+        std::map<std::string, Channel>::iterator it = channels.find(channelName);
+        if (it == channels.end()) {
+            sendNumericReply(client, ERR_NOSUCHCHANNEL, channelName + " :No such channel");
+            return;
+        }
+
+        Channel& chan = it->second;
+
+        // Must be in the channel to leave it
+        if (!chan.hasMember(client.fd)) {
+            sendNumericReply(client, ERR_NOTONCHANNEL, channelName + " :You're not on that channel");
+            return;
+        }
+
+        // Build PART message: :nick!user PART #channel :reason
+        std::string partMsg = ":" + clientObj.getNickname() + 
+                              "!" + clientObj.getUsername() + 
+                              " PART " + channelName + 
+                              " :" + reason + CLDR;
+
+        // Broadcast to everyone in channel (including the person leaving)
+        chan.broadcast(partMsg);
+
+        // Remove from channel and check for auto-promotion
+        int newOpFd = chan.removeMember(client.fd);
+        
+        // If someone was auto-promoted, broadcast MODE +o
+        if (newOpFd != -1) {
+            std::map<int, Client>::iterator newOpIt = clientMap.find(newOpFd);
+            if (newOpIt != clientMap.end()) {
+                std::string newOpNick = newOpIt->second.getNickname();
+                std::string modeMsg = ":" + SERVER_NAME + " MODE " + channelName + 
+                                      " +o " + newOpNick + CLDR;
+                chan.broadcast(modeMsg);
+            }
+        }
+
+        return;
+    }
 
 	// Unknown command
 	sendNumericReply(client, ERR_UNKNOWNCOMMAND, command + " :Unknown command");

@@ -85,6 +85,7 @@
 	const std::string WEECHAT_CHANNEL_PREFIX("&#!+"); //According to the protocol manual
 	const std::string WEECHAT_TOPIC("TOPIC");
 	const std::string WEECHAT_KICK("KICK");
+	const std::string WEECHAT_PART("PART");
 
 	enum WEECHAT_HANDSHAKE {
 		PASSWORD = 1 << 0,
