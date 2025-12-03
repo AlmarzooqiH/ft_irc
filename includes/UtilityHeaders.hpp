@@ -30,6 +30,7 @@
 # include <vector>
 # include <fstream>
 # include <iomanip>
-#include <ctime>
+# include <ctime>
+# include <cstring>
 
 #endif

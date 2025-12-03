@@ -269,40 +269,60 @@ void	Server::sendNumericReply(pollfd& client, const std::string& numeric, const 
 }
 
 void Server::cleanClient(pollfd& client) {
-    if (client.fd >= 0) {
-        std::string nickname = this->clientMap[client.fd].getNickname();
-        std::cout << nickname << " Has disconnected!" << std::endl;
-        
-        // Remove from all channels and handle auto-promotion
-        for (std::map<std::string, Channel>::iterator it = channels.begin(); 
-             it != channels.end(); ++it) {
-            Channel& chan = it->second;
-            if (chan.hasMember(client.fd)) {
-                // Broadcast QUIT to channel members
-                std::string quitMsg = ":" + nickname + " QUIT :Client disconnected" + CLDR;
-                chan.broadcast(quitMsg, client.fd);
-                
-                // Remove and check for auto-promotion
-                int newOpFd = chan.removeMember(client.fd);
-                
-                // If someone was auto-promoted, broadcast MODE +o
-                if (newOpFd != -1) {
-                    std::map<int, Client>::iterator newOpIt = clientMap.find(newOpFd);
-                    if (newOpIt != clientMap.end()) {
-                        std::string newOpNick = newOpIt->second.getNickname();
-                        std::string modeMsg = ":" + SERVER_NAME + " MODE " + it->first + 
-                                              " +o " + newOpNick + CLDR;
-                        chan.broadcast(modeMsg);
-                    }
+    if (client.fd < 0)
+        return;
+    
+    // Check if client exists in map
+    std::map<int, Client>::iterator clientIt = clientMap.find(client.fd);
+    if (clientIt == clientMap.end()) {
+        // Client not in map, just close the fd
+        close(client.fd);
+        client.fd = -1;
+        client.events = 0;
+        client.revents = 0;
+        return;
+    }
+    
+    std::string nickname = clientIt->second.getNickname();
+    if (nickname.empty())
+        nickname = "*";
+    
+    std::cout << nickname << " Has disconnected!" << std::endl;
+    
+    // Remove from all channels and handle auto-promotion
+    for (std::map<std::string, Channel>::iterator it = channels.begin(); 
+         it != channels.end(); ++it) {
+        Channel& chan = it->second;
+        if (chan.hasMember(client.fd)) {
+            // Broadcast QUIT to channel members (before removing)
+            std::string quitMsg = ":" + nickname + " QUIT :Client disconnected" + CLDR;
+            chan.broadcast(quitMsg, client.fd);
+            
+            // Remove and check for auto-promotion
+            int newOpFd = chan.removeMember(client.fd);
+            
+            // If someone was auto-promoted, broadcast MODE +o
+            if (newOpFd != -1) {
+                std::map<int, Client>::iterator newOpIt = clientMap.find(newOpFd);
+                if (newOpIt != clientMap.end()) {
+                    std::string newOpNick = newOpIt->second.getNickname();
+                    std::string modeMsg = ":" + SERVER_NAME + " MODE " + it->first + 
+                                          " +o " + newOpNick + CLDR;
+                    chan.broadcast(modeMsg);
                 }
             }
         }
-        
-        clientMap.erase(client.fd);
-        clientBuffer.erase(client.fd);
-        close(client.fd);
-        client.fd = -1;
     }
+    
+    // Clean up client data
+    clientMap.erase(client.fd);
+    clientBuffer.erase(client.fd);
+    
+    // Close the socket
+    close(client.fd);
+    client.fd = -1;
+    client.events = 0;
+    client.revents = 0;
 }
 
 /**
@@ -351,8 +371,7 @@ void	Server::processCommand(pollfd& client, const std::string& command, const st
 		std::string password = params[0];
 		if (password != this->password) {
 			sendNumericReply(client, ERR_PASSWDMISMATCH, ":Password incorrect");
-			this->clientMap.erase(client.fd);
-			close(client.fd);
+			cleanClient(client);
 			return;
 		}
 		
@@ -438,6 +457,22 @@ void	Server::processCommand(pollfd& client, const std::string& command, const st
 			return ;
 		}
 		if (cmd == WEECHAT_QUIT){
+			// Send QUIT message to all channels before cleaning
+			if (this->clientMap.find(client.fd) != this->clientMap.end()) {
+				Client& clientObj = this->clientMap[client.fd];
+				std::string nickname = clientObj.getNickname();
+				std::string reason = params.size() > 0 ? params[0] : "Client quit";
+				
+				// Broadcast to all channels the user is in
+				for (std::map<std::string, Channel>::iterator it = channels.begin(); 
+				     it != channels.end(); ++it) {
+					Channel& chan = it->second;
+					if (chan.hasMember(client.fd)) {
+						std::string quitMsg = ":" + nickname + " QUIT :" + reason + CLDR;
+						chan.broadcast(quitMsg);
+					}
+				}
+			}
 			cleanClient(client);
 			return;
 		}
@@ -818,7 +853,7 @@ void	Server::processCommand(pollfd& client, const std::string& command, const st
         }
 
         // Add target to the invited list
-        chan.addInvite(targetFd);
+        chan.inviteUser(targetFd);
 
         // Send RPL_INVITING to the inviter (341)
         std::string invitingReply = ":" + SERVER_NAME + " 341 " + clientObj.getNickname() + 
@@ -1129,7 +1164,14 @@ void	Server::start(void){
 			int clientSocket = accept(this->clients[0].fd, NULL, NULL);
 			if (clientSocket < 0)
 				continue ;
-			if (this->clientMap.size() == serverCapacity){
+			
+			// Set the new client socket to non-blocking
+			if (fcntl(clientSocket, F_SETFL, O_NONBLOCK) < 0) {
+				close(clientSocket);
+				continue;
+			}
+			
+			if (this->clientMap.size() >= serverCapacity - 1){
 				rejectClient(clientSocket);
 				continue ;
 			}
@@ -1148,8 +1190,17 @@ void	Server::start(void){
 			pollfd& client = this->clients[i];
 			if ((client.fd >= 0) && (client.revents & POLLIN)){
 				std::string buffer = recieveData(client);
-				if (buffer.empty())
+				
+				// Empty buffer means client disconnected or error
+				if (buffer.empty()){
+					cleanClient(client);
 					continue;
+				}
+				
+				// Check if client still exists (might have been removed)
+				if (this->clientBuffer.find(client.fd) == this->clientBuffer.end())
+					continue;
+				
 				std::string& clientBuffer = this->clientBuffer[client.fd];
 				clientBuffer += buffer;
 				size_t endPosition = clientBuffer.find(CLDR);
@@ -1157,6 +1208,11 @@ void	Server::start(void){
 					std::string message = clientBuffer.substr(0, endPosition);
 					// Use RFC-compliant message handler
 					handleMessage(client, message);
+					
+					// Check if client still valid after handling message
+					if (client.fd < 0)
+						break;
+					
 					clientBuffer.erase(0, endPosition + 2);
 					endPosition = clientBuffer.find(CLDR);
 				}
