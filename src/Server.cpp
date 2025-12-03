@@ -761,6 +761,315 @@ void	Server::processCommand(pollfd& client, const std::string& command, const st
 
         return;
     }
+	// ============================================
+    //  INVITE COMMAND 
+    // ============================================
+    if (cmd == WEECHAT_INVITE) {
+        // INVITE <nickname> <channel>
+        if (params.size() < 2) {
+            sendNumericReply(client, ERR_NEEDMOREPARAMS, "INVITE :Not enough parameters");
+            return;
+        }
+
+        std::string targetNick = params[0];
+        std::string channelName = params[1];
+
+        // Check if channel exists
+        std::map<std::string, Channel>::iterator it = channels.find(channelName);
+        if (it == channels.end()) {
+            sendNumericReply(client, ERR_NOSUCHCHANNEL, channelName + " :No such channel");
+            return;
+        }
+
+        Channel& chan = it->second;
+
+        // Inviter must be in the channel
+        if (!chan.hasMember(client.fd)) {
+            sendNumericReply(client, ERR_NOTONCHANNEL, channelName + " :You're not on that channel");
+            return;
+        }
+
+        // If channel is invite-only (+i), only operators can invite
+        if (chan.isInviteOnly() && !chan.isOperator(client.fd)) {
+            sendNumericReply(client, ERR_CHANOPRIVSNEEDED, channelName + " :You're not channel operator");
+            return;
+        }
+
+        // Find the target client by nickname
+        int targetFd = -1;
+        for (std::map<int, Client>::iterator clientIt = clientMap.begin(); 
+             clientIt != clientMap.end(); ++clientIt) {
+            if (clientIt->second.getNickname() == targetNick) {
+                targetFd = clientIt->first;
+                break;
+            }
+        }
+
+        // Target must exist
+        if (targetFd == -1) {
+            sendNumericReply(client, ERR_NOSUCHNICK, targetNick + " :No such nick/channel");
+            return;
+        }
+
+        // Target must NOT already be in the channel
+        if (chan.hasMember(targetFd)) {
+            sendNumericReply(client, ERR_USERONCHANNEL, targetNick + " " + channelName + " :is already on channel");
+            return;
+        }
+
+        // Add target to the invited list
+        chan.addInvite(targetFd);
+
+        // Send RPL_INVITING to the inviter (341)
+        std::string invitingReply = ":" + SERVER_NAME + " 341 " + clientObj.getNickname() + 
+                                    " " + targetNick + " " + channelName + CLDR;
+        sendMessage(client, invitingReply);
+
+        // Send INVITE message to the target user
+        std::string inviteMsg = ":" + clientObj.getNickname() + 
+                                "!" + clientObj.getUsername() + 
+                                " INVITE " + targetNick + 
+                                " " + channelName + CLDR;
+        
+        // Find the target's pollfd and send the message
+        for (unsigned int i = 1; i < serverCapacity; i++) {
+            if (clients[i].fd == targetFd) {
+                sendMessage(clients[i], inviteMsg);
+                break;
+            }
+        }
+
+        return;
+    }
+	// ============================================
+    //  MODE COMMAND 
+    // ============================================
+    if (cmd == WEECHAT_MODE) {
+        // MODE #channel [+/-modes] [parameters]
+        if (params.size() < 1) {
+            sendNumericReply(client, ERR_NEEDMOREPARAMS, "MODE :Not enough parameters");
+            return;
+        }
+
+        std::string target = params[0];
+
+        // Check if it's a channel mode (starts with #)
+        if (target[0] != '#') {
+            // User mode - not implementing for this project
+            return;
+        }
+
+        std::string channelName = target;
+
+        // Check if channel exists
+        std::map<std::string, Channel>::iterator it = channels.find(channelName);
+        if (it == channels.end()) {
+            sendNumericReply(client, ERR_NOSUCHCHANNEL, channelName + " :No such channel");
+            return;
+        }
+
+        Channel& chan = it->second;
+
+        // If no mode string provided, show current modes
+        if (params.size() == 1) {
+            std::string modes = "+";
+            std::string modeParams = "";
+            
+            if (chan.isInviteOnly()) modes += "i";
+            if (chan.isTopicRestricted()) modes += "t";
+            if (!chan.getKey().empty()) {
+                modes += "k";
+                modeParams += " " + chan.getKey();
+            }
+			            if (chan.getUserLimit() > 0) {
+                modes += "l";
+                std::ostringstream oss;
+                oss << chan.getUserLimit();
+                modeParams += " " + oss.str();
+            }
+            
+            // RPL_CHANNELMODEIS (324)
+            std::string reply = ":" + SERVER_NAME + " 324 " + clientObj.getNickname() + 
+                               " " + channelName + " " + modes + modeParams + CLDR;
+            sendMessage(client, reply);
+            return;
+        }
+
+        // User must be operator to change modes
+        if (!chan.isOperator(client.fd)) {
+            sendNumericReply(client, ERR_CHANOPRIVSNEEDED, channelName + " :You're not channel operator");
+            return;
+        }
+
+        std::string modeString = params[1];
+        bool adding = true;  // + = adding mode, - = removing mode
+        size_t paramIndex = 2;  // Index for mode parameters
+
+        std::string appliedModes = "";
+        std::string appliedParams = "";
+        bool currentlyAdding = true;
+
+        for (size_t i = 0; i < modeString.length(); i++) {
+            char mode = modeString[i];
+
+            if (mode == '+') {
+                adding = true;
+                if (currentlyAdding != adding) {
+                    appliedModes += '+';
+                    currentlyAdding = true;
+                }
+                continue;
+            }
+            if (mode == '-') {
+                adding = false;
+                if (currentlyAdding != adding) {
+                    appliedModes += '-';
+					                    currentlyAdding = false;
+                }
+                continue;
+            }
+
+            switch (mode) {
+                // +i: Invite-only channel
+                case 'i': {
+                    if (adding && !chan.isInviteOnly()) {
+                        chan.setInviteOnly(true);
+                        if (appliedModes.empty() || appliedModes[appliedModes.length()-1] == '-') 
+                            appliedModes += '+';
+                        appliedModes += 'i';
+                    } else if (!adding && chan.isInviteOnly()) {
+                        chan.setInviteOnly(false);
+                        if (appliedModes.empty() || appliedModes[appliedModes.length()-1] == '+') 
+                            appliedModes += '-';
+                        appliedModes += 'i';
+                    }
+                    break;
+                }
+
+                // +t: Topic restricted to operators
+                case 't': {
+                    if (adding && !chan.isTopicRestricted()) {
+                        chan.setTopicRestricted(true);
+                        if (appliedModes.empty() || appliedModes[appliedModes.length()-1] == '-') 
+                            appliedModes += '+';
+                        appliedModes += 't';
+                    } else if (!adding && chan.isTopicRestricted()) {
+                        chan.setTopicRestricted(false);
+                        if (appliedModes.empty() || appliedModes[appliedModes.length()-1] == '+') 
+                            appliedModes += '-';
+                        appliedModes += 't';
+                    }
+                    break;
+                }
+				
+                // +k: Channel key (password)
+                case 'k': {
+                    if (adding) {
+                        if (paramIndex >= params.size()) {
+                            sendNumericReply(client, ERR_NEEDMOREPARAMS, "MODE :Not enough parameters");
+                            return;
+                        }
+                        std::string key = params[paramIndex++];
+                        chan.setKey(key);
+                        if (appliedModes.empty() || appliedModes[appliedModes.length()-1] == '-') 
+                            appliedModes += '+';
+                        appliedModes += 'k';
+                        appliedParams += " " + key;
+                    } else {
+                        chan.setKey("");
+                        if (appliedModes.empty() || appliedModes[appliedModes.length()-1] == '+') 
+                            appliedModes += '-';
+                        appliedModes += 'k';
+                    }
+                    break;
+                }
+
+                // +o: Give/take operator privilege
+                case 'o': {
+                    if (paramIndex >= params.size()) {
+                        sendNumericReply(client, ERR_NEEDMOREPARAMS, "MODE :Not enough parameters");
+                        return;
+                    }
+                    std::string targetNick = params[paramIndex++];
+                    
+                    // Find target user
+                    int targetFd = -1;
+                    for (std::map<int, Client>::iterator clientIt = clientMap.begin(); 
+                         clientIt != clientMap.end(); ++clientIt) {
+                        if (clientIt->second.getNickname() == targetNick) {
+                            targetFd = clientIt->first;
+                            break;
+                        }
+                    }
+                    
+                    if (targetFd == -1) {
+                        sendNumericReply(client, ERR_NOSUCHNICK, targetNick + " :No such nick/channel");
+                        continue;
+                    }
+                    
+                    if (!chan.hasMember(targetFd)) {
+                        sendNumericReply(client, ERR_USERNOTINCHANNEL, targetNick + " " + channelName + " :They aren't on that channel");
+                        continue;
+					                    }
+                    
+                    if (adding && !chan.isOperator(targetFd)) {
+                        chan.addOperator(targetFd);
+                        if (appliedModes.empty() || appliedModes[appliedModes.length()-1] == '-') 
+                            appliedModes += '+';
+                        appliedModes += 'o';
+                        appliedParams += " " + targetNick;
+                    } else if (!adding && chan.isOperator(targetFd)) {
+                        chan.removeOperator(targetFd);
+                        if (appliedModes.empty() || appliedModes[appliedModes.length()-1] == '+') 
+                            appliedModes += '-';
+                        appliedModes += 'o';
+                        appliedParams += " " + targetNick;
+                    }
+                    break;
+                }
+
+                // +l: User limit
+                case 'l': {
+                    if (adding) {
+                        if (paramIndex >= params.size()) {
+                            sendNumericReply(client, ERR_NEEDMOREPARAMS, "MODE :Not enough parameters");
+                            return;
+                        }
+                        std::string limitStr = params[paramIndex++];
+                        int limit = std::atoi(limitStr.c_str());
+                        if (limit > 0) {
+                            chan.setUserLimit(limit);
+                            if (appliedModes.empty() || appliedModes[appliedModes.length()-1] == '-') 
+                                appliedModes += '+';
+                            appliedModes += 'l';
+                            appliedParams += " " + limitStr;
+                        }
+                    } else {
+                        chan.setUserLimit(-1);
+                        if (appliedModes.empty() || appliedModes[appliedModes.length()-1] == '+') 
+                            appliedModes += '-';
+                        appliedModes += 'l';
+                    }
+                    break;
+                }
+
+                default:
+                    // Unknown mode, ignore
+                    break;
+            }
+        }
+
+        // Broadcast the mode change if any modes were applied
+        if (!appliedModes.empty()) {
+            std::string modeMsg = ":" + clientObj.getNickname() + 
+                                  "!" + clientObj.getUsername() + 
+                                  " MODE " + channelName + 
+                                  " " + appliedModes + appliedParams + CLDR;
+            chan.broadcast(modeMsg);
+        }
+
+        return;
+    }
 
 	// Unknown command
 	sendNumericReply(client, ERR_UNKNOWNCOMMAND, command + " :Unknown command");
