@@ -111,6 +111,7 @@ class Server{
 			~Server();
 			Server(int port, const std::string& password);
 			void	start(void);
+			void	shutdown(void);
 
 			class InvalidPortNumberException: public std::exception{
 				public:

@@ -348,9 +348,19 @@ void	Server::processCommand(pollfd& client, const std::string& command, const st
 				subCmd[i] = std::toupper(subCmd[i]);
 			}
 			
+			std::string nick = clientObj.isNicknameSet() ? clientObj.getNickname() : "*";
+			
 			if (subCmd == "LS") {
-				std::string response = ":" + SERVER_NAME + " CAP " + clientObj.getNickname() + " LS :" + CLDR;
+				// Respond with supported capabilities (none for basic IRC)
+				std::string response = ":" + SERVER_NAME + " CAP " + nick + " LS :" + CLDR;
 				sendMessage(client, response);
+			} else if (subCmd == "REQ") {
+				// Acknowledge capability request (but we don't support any)
+				std::string response = ":" + SERVER_NAME + " CAP " + nick + " ACK :" + CLDR;
+				sendMessage(client, response);
+			} else if (subCmd == "END") {
+				// End capability negotiation
+				// No response needed, client will proceed with registration
 			}
 		}
 		return;
@@ -452,9 +462,50 @@ void	Server::processCommand(pollfd& client, const std::string& command, const st
 	}
 
 		if (cmd == WEECHAT_PING){
-			std::string response = WEECHAT_PONG + " :" + SERVER_NAME + CLDR;
+			std::string pongMsg = params.size() > 0 ? params[0] : SERVER_NAME;
+			std::string response = ":" + SERVER_NAME + " PONG " + SERVER_NAME + " :" + pongMsg + CLDR;
 			sendMessage(client, response);
 			return ;
+		}
+		// Handle WHO command (WeeChat compatibility)
+		if (cmd == "WHO") {
+			if (params.size() < 1) {
+				sendNumericReply(client, ERR_NEEDMOREPARAMS, "WHO :Not enough parameters");
+				return;
+			}
+			std::string target = params[0];
+			
+			// If it's a channel
+			if (target[0] == '#') {
+				std::map<std::string, Channel>::iterator chanIt = channels.find(target);
+				if (chanIt == channels.end()) {
+					sendNumericReply(client, ERR_NOSUCHCHANNEL, target + " :No such channel");
+					return;
+				}
+				
+				Channel& chan = chanIt->second;
+				const std::set<int>& members = chan.getMembers();
+				
+				// Send RPL_WHOREPLY (352) for each member
+				for (std::set<int>::const_iterator it = members.begin(); it != members.end(); ++it) {
+					std::map<int, Client>::iterator memIt = clientMap.find(*it);
+					if (memIt != clientMap.end()) {
+						Client& member = memIt->second;
+						std::string flags = chan.isOperator(*it) ? "@" : "";
+						std::string whoReply = ":" + SERVER_NAME + " 352 " + clientObj.getNickname() +
+							" " + target + " " + member.getUsername() + " localhost " +
+							SERVER_NAME + " " + member.getNickname() + " H" + flags +
+							" :0 " + member.getRealname() + CLDR;
+						sendMessage(client, whoReply);
+					}
+				}
+			}
+			
+			// Send RPL_ENDOFWHO (315)
+			std::string endWho = ":" + SERVER_NAME + " 315 " + clientObj.getNickname() +
+				" " + target + " :End of /WHO list" + CLDR;
+			sendMessage(client, endWho);
+			return;
 		}
 		if (cmd == WEECHAT_QUIT){
 			// Send QUIT message to all channels before cleaning
@@ -476,6 +527,30 @@ void	Server::processCommand(pollfd& client, const std::string& command, const st
 			cleanClient(client);
 			return;
 		}
+		// Handle NAMES command
+		if (cmd == "NAMES") {
+			if (params.size() < 1) {
+				// No parameter - could list all channels, but we'll just return end
+				std::string endMsg = ":" + SERVER_NAME + " 366 " + 
+					clientObj.getNickname() + " * :End of /NAMES list" + CLDR;
+				sendMessage(client, endMsg);
+				return;
+			}
+			
+			std::string channelName = params[0];
+			std::map<std::string, Channel>::iterator it = channels.find(channelName);
+			
+			if (it == channels.end()) {
+				sendNumericReply(client, ERR_NOSUCHCHANNEL, channelName + " :No such channel");
+				return;
+			}
+			
+			Channel& chan = it->second;
+			std::string namesReply = chan.getNamesReply(clientMap);
+			sendMessage(client, namesReply);
+			return;
+		}
+		
 		if (cmd == WEECHAT_LIST) {
 			for (std::map<std::string, Channel>::iterator it = channels.begin(); it != channels.end(); ++it) {
 				Channel &chan = it->second;
@@ -1148,6 +1223,17 @@ void	Server::rejectClient(int clientSocket){
 }
 
 /**
+ * @brief Gracefully shutdown the server
+ * Called by signal handler to stop the event loop
+ * 
+ * @return void.
+ * @author Hamad
+ */
+void	Server::shutdown(void){
+	this->isRunning = false;
+}
+
+/**
  * @brief This function is responsible to accept/reject clients. It will also handel
  * client messages or commands via performHandshake().
  * 
@@ -1157,8 +1243,15 @@ void	Server::rejectClient(int clientSocket){
 void	Server::start(void){
 	while (this->isRunning){
 		this->pollManager = poll(this->clients, this->serverCapacity, MS_TIMEOUT);
-		if (this->pollManager <= 0){
-			continue;
+		
+		// Handle poll errors (EINTR from signals is ok, continue)
+		if (this->pollManager < 0){
+			if (errno == EINTR)
+				continue;  // Signal interrupted, check isRunning and continue
+			break;  // Real error, exit loop
+		}
+		if (this->pollManager == 0){
+			continue;  // Timeout, no events
 		}
 		if (this->clients[0].revents & POLLIN){
 			int clientSocket = accept(this->clients[0].fd, NULL, NULL);
@@ -1171,6 +1264,7 @@ void	Server::start(void){
 				continue;
 			}
 			
+			// Check if server is full (serverCapacity includes server socket at index 0)
 			if (this->clientMap.size() >= serverCapacity - 1){
 				rejectClient(clientSocket);
 				continue ;

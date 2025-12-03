@@ -32,5 +32,6 @@
 # include <iomanip>
 # include <ctime>
 # include <cstring>
+# include <cerrno>
 
 #endif
