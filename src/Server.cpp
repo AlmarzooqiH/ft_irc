@@ -871,7 +871,7 @@ void	Server::processCommand(pollfd& client, const std::string& command, const st
 
         return;
     }
-	// ============================================
+// ============================================
     //  INVITE COMMAND 
     // ============================================
     if (cmd == WEECHAT_INVITE) {
@@ -936,10 +936,9 @@ void	Server::processCommand(pollfd& client, const std::string& command, const st
         sendMessage(client, invitingReply);
 
         // Send INVITE message to the target user
-        std::string inviteMsg = ":" + clientObj.getNickname() + 
-                                "!" + clientObj.getUsername() + 
-                                " INVITE " + targetNick + 
-                                " " + channelName + CLDR;
+        std::string inviteMsg = ":" + SERVER_NAME + " NOTICE " + targetNick + 
+                                " :You have been invited to " + channelName + 
+                                " by " + clientObj.getNickname() + CLDR;
         
         // Find the target's pollfd and send the message
         for (unsigned int i = 1; i < serverCapacity; i++) {
@@ -998,6 +997,11 @@ void	Server::processCommand(pollfd& client, const std::string& command, const st
                 modeParams += " " + oss.str();
             }
             
+			// If no modes set, just show +
+            if (modes == "+") {
+                modes = "";
+            }
+
             // RPL_CHANNELMODEIS (324)
             std::string reply = ":" + SERVER_NAME + " 324 " + clientObj.getNickname() + 
                                " " + channelName + " " + modes + modeParams + CLDR;
@@ -1015,43 +1019,32 @@ void	Server::processCommand(pollfd& client, const std::string& command, const st
         bool adding = true;  // + = adding mode, - = removing mode
         size_t paramIndex = 2;  // Index for mode parameters
 
-        std::string appliedModes = "";
-        std::string appliedParams = "";
-        bool currentlyAdding = true;
+        std::string addedModes = "";
+        std::string removedModes = "";
+        std::string addedParams = "";
+        std::string removedParams = "";
 
         for (size_t i = 0; i < modeString.length(); i++) {
             char mode = modeString[i];
 
-            if (mode == '+') {
+			if (mode == '+') {
                 adding = true;
-                if (currentlyAdding != adding) {
-                    appliedModes += '+';
-                    currentlyAdding = true;
-                }
                 continue;
             }
             if (mode == '-') {
                 adding = false;
-                if (currentlyAdding != adding) {
-                    appliedModes += '-';
-					                    currentlyAdding = false;
-                }
                 continue;
             }
 
-            switch (mode) {
+			switch (mode) {
                 // +i: Invite-only channel
                 case 'i': {
                     if (adding && !chan.isInviteOnly()) {
                         chan.setInviteOnly(true);
-                        if (appliedModes.empty() || appliedModes[appliedModes.length()-1] == '-') 
-                            appliedModes += '+';
-                        appliedModes += 'i';
+                        addedModes += 'i';
                     } else if (!adding && chan.isInviteOnly()) {
                         chan.setInviteOnly(false);
-                        if (appliedModes.empty() || appliedModes[appliedModes.length()-1] == '+') 
-                            appliedModes += '-';
-                        appliedModes += 'i';
+                        removedModes += 'i';
                     }
                     break;
                 }
@@ -1060,17 +1053,14 @@ void	Server::processCommand(pollfd& client, const std::string& command, const st
                 case 't': {
                     if (adding && !chan.isTopicRestricted()) {
                         chan.setTopicRestricted(true);
-                        if (appliedModes.empty() || appliedModes[appliedModes.length()-1] == '-') 
-                            appliedModes += '+';
-                        appliedModes += 't';
+                        addedModes += 't';
                     } else if (!adding && chan.isTopicRestricted()) {
                         chan.setTopicRestricted(false);
-                        if (appliedModes.empty() || appliedModes[appliedModes.length()-1] == '+') 
-                            appliedModes += '-';
-                        appliedModes += 't';
+                        removedModes += 't';
                     }
                     break;
                 }
+
 				
                 // +k: Channel key (password)
                 case 'k': {
@@ -1081,15 +1071,11 @@ void	Server::processCommand(pollfd& client, const std::string& command, const st
                         }
                         std::string key = params[paramIndex++];
                         chan.setKey(key);
-                        if (appliedModes.empty() || appliedModes[appliedModes.length()-1] == '-') 
-                            appliedModes += '+';
-                        appliedModes += 'k';
-                        appliedParams += " " + key;
+                        addedModes += 'k';
+                        addedParams += " " + key;
                     } else {
                         chan.setKey("");
-                        if (appliedModes.empty() || appliedModes[appliedModes.length()-1] == '+') 
-                            appliedModes += '-';
-                        appliedModes += 'k';
+                        removedModes += 'k';
                     }
                     break;
                 }
@@ -1120,20 +1106,16 @@ void	Server::processCommand(pollfd& client, const std::string& command, const st
                     if (!chan.hasMember(targetFd)) {
                         sendNumericReply(client, ERR_USERNOTINCHANNEL, targetNick + " " + channelName + " :They aren't on that channel");
                         continue;
-					                    }
+                    }
                     
                     if (adding && !chan.isOperator(targetFd)) {
                         chan.addOperator(targetFd);
-                        if (appliedModes.empty() || appliedModes[appliedModes.length()-1] == '-') 
-                            appliedModes += '+';
-                        appliedModes += 'o';
-                        appliedParams += " " + targetNick;
+                        addedModes += 'o';
+                        addedParams += " " + targetNick;
                     } else if (!adding && chan.isOperator(targetFd)) {
                         chan.removeOperator(targetFd);
-                        if (appliedModes.empty() || appliedModes[appliedModes.length()-1] == '+') 
-                            appliedModes += '-';
-                        appliedModes += 'o';
-                        appliedParams += " " + targetNick;
+                        removedModes += 'o';
+                        removedParams += " " + targetNick;
                     }
                     break;
                 }
@@ -1149,16 +1131,12 @@ void	Server::processCommand(pollfd& client, const std::string& command, const st
                         int limit = std::atoi(limitStr.c_str());
                         if (limit > 0) {
                             chan.setUserLimit(limit);
-                            if (appliedModes.empty() || appliedModes[appliedModes.length()-1] == '-') 
-                                appliedModes += '+';
-                            appliedModes += 'l';
-                            appliedParams += " " + limitStr;
+                            addedModes += 'l';
+                            addedParams += " " + limitStr;
                         }
                     } else {
                         chan.setUserLimit(-1);
-                        if (appliedModes.empty() || appliedModes[appliedModes.length()-1] == '+') 
-                            appliedModes += '-';
-                        appliedModes += 'l';
+                        removedModes += 'l';
                     }
                     break;
                 }
@@ -1167,6 +1145,19 @@ void	Server::processCommand(pollfd& client, const std::string& command, const st
                     // Unknown mode, ignore
                     break;
             }
+        }
+
+        // Build the final mode string
+        std::string appliedModes = "";
+        std::string appliedParams = "";
+        
+        if (!addedModes.empty()) {
+            appliedModes += "+" + addedModes;
+            appliedParams += addedParams;
+        }
+        if (!removedModes.empty()) {
+            appliedModes += "-" + removedModes;
+            appliedParams += removedParams;
         }
 
         // Broadcast the mode change if any modes were applied
