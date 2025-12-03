@@ -6,7 +6,7 @@
 /*   By: hamalmar <hamalmar@student.42abudhabi.a    +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2025/10/01 17:04:26 by hamalmar          #+#    #+#             */
-/*   Updated: 2025/11/25 00:42:55 by hamalmar         ###   ########.fr       */
+/*   Updated: 2025/12/03 17:01:59 by hamalmar         ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
@@ -112,6 +112,11 @@ class Server{
 			Server(int port, const std::string& password);
 			void	start(void);
 			void	shutdown(void);
+
+			class EmptyPasswordException: public std::exception{
+				public:
+					const char	*what() const throw();
+			};
 
 			class InvalidPortNumberException: public std::exception{
 				public:

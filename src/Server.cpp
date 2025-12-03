@@ -37,6 +37,8 @@ Server::Server(int port, const std::string& password){
 		throw (Server::InvalidPortNumberException());
 	else if (port < RESERVED_PORTS)
 		throw (Server::ReservedPortException());
+	if (password.empty())
+		throw(Server::EmptyPasswordException());
 	this->port = port;
 	this->password = password;
 
@@ -1320,6 +1322,10 @@ void	Server::start(void){
 			|_____/_/\_\____|_____|_|    |_| |___\___/|_| \_|____/ 
 */
 
+const char* Server::EmptyPasswordException::what() const throw() {
+    return EMPTY_PASSWORD.c_str();
+}
+
 const char* Server::InvalidPortNumberException::what() const throw() {
     return INVALID_PORT.c_str();
 }
@@ -1351,4 +1357,3 @@ const char* Server::FailedToMakeTheSocketNonBlockingException::what() const thro
 const char* Server::FailedToSetSocketOptionsException::what() const throw() {
     return SOCKET_OPTIONS_FAIL.c_str();
 }
-
