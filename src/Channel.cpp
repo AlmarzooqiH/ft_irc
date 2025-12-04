@@ -20,9 +20,13 @@ Channel::Channel() :
     channelMembers(),
     inviteOnly(false),
     topicRestricted(true),
+    moderated(false),
     key(""),
     userLimit(-1),
-    operators()
+    operators(),
+    voicedUsers(),
+    banMasks(),
+    exceptionMasks()
 {}
 
 Channel::Channel(const std::string& name) : 
@@ -33,9 +37,13 @@ Channel::Channel(const std::string& name) :
     channelMembers(),
     inviteOnly(false),
     topicRestricted(true),
+    moderated(false),
     key(""),
     userLimit(-1),
-    operators()
+    operators(),
+    voicedUsers(),
+    banMasks(),
+    exceptionMasks()
 {
     std::time_t currentTime = std::time(NULL); 
     std::ostringstream oss;
@@ -56,9 +64,13 @@ Channel& Channel::operator=(const Channel& right){
         this->channelMembers = right.channelMembers;
         this->inviteOnly = right.inviteOnly;           
         this->topicRestricted = right.topicRestricted;
+        this->moderated = right.moderated;
         this->key = right.key;
         this->userLimit = right.userLimit;
         this->operators = right.operators;
+        this->voicedUsers = right.voicedUsers;
+        this->banMasks = right.banMasks;
+        this->exceptionMasks = right.exceptionMasks;
 	}
 	return (*this);
 }
@@ -289,6 +301,10 @@ bool Channel::isTopicRestricted() const {
     return topicRestricted;
 }
 
+bool Channel::isModerated() const {
+    return moderated;
+}
+
 std::string Channel::getKey() const {
     return key;
 }
@@ -309,6 +325,10 @@ void Channel::setTopicRestricted(bool value) {
     topicRestricted = value;
 }
 
+void Channel::setModerated(bool value) {
+    moderated = value;
+}
+
 void Channel::setKey(const std::string& password) {
     key = password;
 }
@@ -319,4 +339,74 @@ void Channel::setUserLimit(int limit) {
 
 void Channel::setTopic(const std::string& newTopic) {
     topic = newTopic;
+}
+
+/* ---------------------------------------------- */
+/*              Voice Management (+v)             */
+/* ---------------------------------------------- */
+
+void Channel::addVoice(int clientFd) {
+    voicedUsers.insert(clientFd);
+}
+
+void Channel::removeVoice(int clientFd) {
+    voicedUsers.erase(clientFd);
+}
+
+bool Channel::hasVoice(int clientFd) const {
+    return voicedUsers.find(clientFd) != voicedUsers.end();
+}
+
+/* ---------------------------------------------- */
+/*              Ban Management (+b)               */
+/* ---------------------------------------------- */
+
+void Channel::addBan(const std::string& mask) {
+    banMasks.insert(mask);
+}
+
+void Channel::removeBan(const std::string& mask) {
+    banMasks.erase(mask);
+}
+
+// Check if userhost matches any ban mask
+bool Channel::isBanned(const std::string& userhost) const {
+    for (std::set<std::string>::const_iterator it = banMasks.begin(); 
+         it != banMasks.end(); ++it) {
+        if (matchWildcard(*it, userhost)) {
+            return true;
+        }
+    }
+    return false;
+}
+
+const std::set<std::string>& Channel::getBanList() const {
+    return banMasks;
+}
+
+/* ---------------------------------------------- */
+/*           Exception Management (+e)            */
+/* ---------------------------------------------- */
+
+void Channel::addException(const std::string& mask) {
+    exceptionMasks.insert(mask);
+}
+
+void Channel::removeException(const std::string& mask) {
+    exceptionMasks.erase(mask);
+}
+
+// Check if userhost matches any exception mask
+bool Channel::matchesException(const std::string& userhost) const {
+    for (std::set<std::string>::const_iterator it = exceptionMasks.begin(); 
+         it != exceptionMasks.end(); ++it) {
+        if (matchWildcard(*it, userhost)) {
+            return true;
+        }
+    }
+    return false;
+}
+
+const std::set<std::string>& Channel::getExceptionList() const {
+    return exceptionMasks;
 }

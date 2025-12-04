@@ -92,10 +92,7 @@ Server::Server(int port, const std::string& password){
 		(void)err;
 		throw (Server::FailedToInitalizePollFd());
 	}
-	channels.insert(std::make_pair("#general", Channel("#general")));
-	channels.insert(std::make_pair("#random", Channel("#random")));
-	channels.insert(std::make_pair("#help", Channel("#help")));
-	channels.insert(std::make_pair("#admins", Channel("#admins")));
+	// Channels are now created dynamically on JOIN
 	this->isRunning = true;
 }
 
@@ -340,7 +337,8 @@ void	Server::processCommand(pollfd& client, const std::string& command, const st
 
 	Client& clientObj = this->clientMap[client.fd];
 
-	// Handle CAP command (client capability negotiation)
+	// Handle CAP command (client capability negotiation) - OPTIONAL
+	// RFC: CAP is optional. Clients can register with PASS/NICK/USER without CAP.
 	if (cmd == "CAP") {
 		if (params.size() > 0) {
 			std::string subCmd = params[0];
@@ -351,16 +349,33 @@ void	Server::processCommand(pollfd& client, const std::string& command, const st
 			std::string nick = clientObj.isNicknameSet() ? clientObj.getNickname() : "*";
 			
 			if (subCmd == "LS") {
-				// Respond with supported capabilities (none for basic IRC)
+				// CAP LS [version] - List capabilities
+				// Support both CAP LS and CAP LS 302
+				// We don't support any extensions, so return empty list
 				std::string response = ":" + SERVER_NAME + " CAP " + nick + " LS :" + CLDR;
 				sendMessage(client, response);
 			} else if (subCmd == "REQ") {
+				// CAP REQ :capability1 capability2
 				// Acknowledge capability request (but we don't support any)
-				std::string response = ":" + SERVER_NAME + " CAP " + nick + " ACK :" + CLDR;
-				sendMessage(client, response);
+				// Return NAK (negative acknowledgment) if specific caps requested
+				std::string requestedCaps = params.size() > 1 ? params[1] : "";
+				if (!requestedCaps.empty()) {
+					// Client requested specific capabilities - we don't support any
+					std::string response = ":" + SERVER_NAME + " CAP " + nick + " NAK :" + requestedCaps + CLDR;
+					sendMessage(client, response);
+				} else {
+					// Empty request - acknowledge with empty
+					std::string response = ":" + SERVER_NAME + " CAP " + nick + " ACK :" + CLDR;
+					sendMessage(client, response);
+				}
 			} else if (subCmd == "END") {
-				// End capability negotiation
-				// No response needed, client will proceed with registration
+				// CAP END - End capability negotiation
+				// Client will proceed with normal registration (NICK/USER)
+				// No response needed
+			} else if (subCmd == "LIST") {
+				// CAP LIST - List active capabilities
+				std::string response = ":" + SERVER_NAME + " CAP " + nick + " LIST :" + CLDR;
+				sendMessage(client, response);
 			}
 		}
 		return;
@@ -574,92 +589,248 @@ void	Server::processCommand(pollfd& client, const std::string& command, const st
 			sendNumericReply(client, ERR_NEEDMOREPARAMS, "JOIN :Not enough parameters");
 			return;
 		}
-		std::string channelName = params[0];
 
-		// Check if the channel exists
-		std::map<std::string, Channel>::iterator it = channels.find(channelName);
-		if (it == channels.end()) {
-			sendNumericReply(client, ERR_NOSUCHCHANNEL, channelName + " :No such channel");
+		Client &clientObj = clientMap[client.fd];
+		std::string channelList = params[0];
+
+		// RFC 2812: JOIN 0 - leave all channels
+		if (channelList == "0") {
+			// Leave all channels the user is in
+			for (std::map<std::string, Channel>::iterator it = channels.begin(); it != channels.end(); ++it) {
+				Channel &chan = it->second;
+				if (chan.hasMember(client.fd)) {
+					// Broadcast PART
+					std::string partMsg = ":" + clientObj.getNickname() + "!" + clientObj.getUsername() + 
+					                      " PART " + chan.getName() + " :Leaving" + CLDR;
+					chan.broadcast(partMsg);
+					chan.removeMember(client.fd);
+				}
+			}
 			return;
 		}
-		Channel &chan = it->second;
 
-		// If invite-only, make sure the client is invited
-		if (chan.isInviteOnly() && !chan.isInvited(client.fd)) {
-			sendNumericReply(client, ERR_INVITEONLYCHAN, channelName + " :Cannot join channel (+i)");
-			return;
+		// Parse channel list (can be comma-separated: #foo,#bar)
+		std::vector<std::string> channelNames;
+		size_t pos = 0;
+		while (pos < channelList.length()) {
+			size_t comma = channelList.find(',', pos);
+			if (comma == std::string::npos) {
+				channelNames.push_back(channelList.substr(pos));
+				break;
+			}
+			channelNames.push_back(channelList.substr(pos, comma - pos));
+			pos = comma + 1;
 		}
 
-		// If channel has a key (+k), check if provided
-		if (!chan.getKey().empty()) {
-			if (params.size() < 2 || params[1] != chan.getKey()) {
-				sendNumericReply(client, ERR_BADCHANNELKEY, channelName + " :Cannot join channel (+k)");
-				return;
+		// Parse key list if provided (optional)
+		std::vector<std::string> keys;
+		if (params.size() >= 2) {
+			std::string keyList = params[1];
+			pos = 0;
+			while (pos < keyList.length()) {
+				size_t comma = keyList.find(',', pos);
+				if (comma == std::string::npos) {
+					keys.push_back(keyList.substr(pos));
+					break;
+				}
+				keys.push_back(keyList.substr(pos, comma - pos));
+				pos = comma + 1;
 			}
 		}
 
-		// If user limit (+l) is set
-		if (chan.getUserLimit() > 0 && (int)chan.getMemberCount() >= chan.getUserLimit()) {
-			sendNumericReply(client, ERR_CHANNELISFULL, channelName + " :Cannot join channel (+l)");
-			return;
+		// Process each channel
+		for (size_t i = 0; i < channelNames.size(); i++) {
+			std::string channelName = channelNames[i];
+			std::string key = (i < keys.size()) ? keys[i] : "";
+
+			// Validate channel name (must start with # & ! +)
+			if (channelName.empty() || 
+			    (channelName[0] != '#' && channelName[0] != '&' && 
+			     channelName[0] != '!' && channelName[0] != '+')) {
+				sendNumericReply(client, ERR_BADCHANMASK, channelName + " :Bad Channel Mask");
+				continue;
+			}
+
+			// RFC 2812: Create channel if it doesn't exist
+			std::map<std::string, Channel>::iterator it = channels.find(channelName);
+			if (it == channels.end()) {
+				// Create new channel
+				channels.insert(std::make_pair(channelName, Channel(channelName)));
+				it = channels.find(channelName);
+			}
+			Channel &chan = it->second;
+
+			// If already in channel, skip
+			if (chan.hasMember(client.fd)) {
+				continue;
+			}
+
+			// RFC 2812 Section 3.2.7: Check if user is invited
+			// Invited users bypass invite-only, channel key, user limit, and ban restrictions
+			bool isInvited = chan.isInvited(client.fd);
+
+			// RFC 2812 Section 3.2.3: Check ban list (+b) and exception list (+e)
+			// Build userhost string: nick!user@host
+			std::string userhost = clientObj.getNickname() + "!" + 
+			                       clientObj.getUsername() + "@" + SERVER_IP;
+			
+			// Check if banned (unless invited or matches exception)
+			if (!isInvited && chan.isBanned(userhost) && !chan.matchesException(userhost)) {
+				sendNumericReply(client, ERR_BANNEDFROMCHAN, channelName + " :Cannot join channel (+b)");
+				continue;
+			}
+
+			// If invite-only, make sure the client is invited
+			if (chan.isInviteOnly() && !isInvited) {
+				sendNumericReply(client, ERR_INVITEONLYCHAN, channelName + " :Cannot join channel (+i)");
+				continue;
+			}
+
+			// If channel has a key (+k), check if provided (unless invited)
+			if (!isInvited && !chan.getKey().empty() && chan.getKey() != key) {
+				sendNumericReply(client, ERR_BADCHANNELKEY, channelName + " :Cannot join channel (+k)");
+				continue;
+			}
+
+			// If user limit (+l) is set (unless invited)
+			if (!isInvited && chan.getUserLimit() > 0 && (int)chan.getMemberCount() >= chan.getUserLimit()) {
+				sendNumericReply(client, ERR_CHANNELISFULL, channelName + " :Cannot join channel (+l)");
+				continue;
+			}
+			
+			// Add client to channel
+			chan.addMember(client.fd);
+
+			// RFC 2812: Remove invite once user successfully joins
+			if (isInvited) {
+				chan.removeInvite(client.fd);
+			}
+
+			// If this is the first member, make them operator
+			if (chan.getMemberCount() == 1) {
+				chan.addOperator(client.fd);
+			}
+
+			// RFC 2812: Broadcast JOIN to all channel members (including joiner)
+			std::string joinMsg = ":" + clientObj.getNickname() + "!" + clientObj.getUsername() + 
+			                      "@" + SERVER_IP + " JOIN " + channelName + CLDR;
+			chan.broadcast(joinMsg);
+
+			// If first member and now operator, send MODE
+			if (chan.getMemberCount() == 1) {
+				std::string opMsg = ":" + SERVER_NAME + " MODE " + channelName + " +o " + clientObj.getNickname() + CLDR;
+				sendMessage(client, opMsg);
+			}
+
+			// Send topic if set
+			std::string topic = chan.getTopic();
+			if (topic.empty()) {
+				sendNumericReply(client, RPL_NOTOPIC, channelName + " :No topic is set");
+			} else {
+				sendNumericReply(client, RPL_TOPIC, channelName + " :" + topic);
+			}
+
+			// RFC 2812: Send RPL_NAMREPLY with proper format
+			// Format: "= #channel :@nick1 +nick2 nick3"
+			std::string namesList = "";
+			const std::set<int>& members = chan.getMembers();
+			for (std::set<int>::const_iterator memIt = members.begin(); memIt != members.end(); ++memIt) {
+				if (clientMap.find(*memIt) != clientMap.end()) {
+					if (!namesList.empty()) namesList += " ";
+					// Prefix with @ if operator, + if voiced
+					if (chan.isOperator(*memIt)) {
+						namesList += "@";
+					} else if (chan.hasVoice(*memIt)) {
+						namesList += "+";
+					}
+					namesList += clientMap[*memIt].getNickname();
+				}
+			}
+			// RFC 2812 RPL_NAMREPLY: "= #channel :names"
+			std::string namesMsg = ":" + SERVER_NAME + " 353 " + clientObj.getNickname() + 
+			                       " = " + channelName + " :" + namesList + CLDR;
+			sendMessage(client, namesMsg);
+			
+			// RFC 2812: Send RPL_ENDOFNAMES
+			std::string endMsg = ":" + SERVER_NAME + " 366 " + clientObj.getNickname() + 
+			                     " " + channelName + " :End of /NAMES list" + CLDR;
+			sendMessage(client, endMsg);
 		}
-		
-		// Add client to channel
-		chan.addMember(client.fd);
-
-		// If this is the first member, make them operator
-		if (chan.getMemberCount() == 1) {
-			chan.addOperator(client.fd);
-			std::string opMsg = ":" + SERVER_NAME + " MODE " + channelName + " +o " + clientObj.getNickname() + CLDR;
-    		sendMessage(client, opMsg);
-		}
-
-		// Broadcast JOIN to all channel members
-		std::string joinMsg = ":" + clientObj.getNickname() + " JOIN " + channelName + CLDR;
-		chan.broadcast(joinMsg);
-
-		// Send topic if any
-		std::string topic = chan.getTopic();
-		if (!topic.empty()) {
-			sendNumericReply(client, RPL_TOPIC, channelName + " :" + topic);
-		}
-
-		// Send NAMES list
-		std::string namesReply = chan.getNamesReply(clientMap);
-		sendMessage(client, namesReply);
 		return;
 	}
 	if (cmd == WEECHAT_PRIVMSG){
-		// Need at least target + message
-		if (params.size() < 2){
-			sendNumericReply(client, ERR_NEEDMOREPARAMS, "PRIVMSG :Not enough parameters");
-			return;
-		}
-		std::string channelName = params[0];
-
-		// Channel must exist
-		if (this->channels.find(channelName) == this->channels.end()){
-			sendNumericReply(client, ERR_NOSUCHCHANNEL, channelName + " :No such channel");
+		Client &clientObj = clientMap[client.fd];
+		
+		// RFC 2812: ERR_NORECIPIENT (411)
+		if (params.size() < 1){
+			sendNumericReply(client, "411", ":No recipient given (PRIVMSG)");
 			return;
 		}
 
-		// Get channel by reference
-		Channel &channel = this->channels[channelName];
-
-		// Sender must be in the channel
-		if (!channel.hasMember(client.fd)){
-			sendNumericReply(client, ERR_CANNOTSENDTOCHAN, channelName + " :Cannot send to channel");
+		// RFC 2812: ERR_NOTEXTTOSEND (412)
+		if (params.size() < 2 || params[1].empty()){
+			sendNumericReply(client, "412", ":No text to send");
 			return;
 		}
 
-		// Build the message (no host, as requested)
-		std::string fullMsg;
-		fullMsg  = ":" + clientObj.getNickname();
-		fullMsg += "!" + clientObj.getUsername();
-		fullMsg += " PRIVMSG " + channelName + " :" + params[1] + CLDR;
+		std::string target = params[0];
+		std::string message = params[1];
 
-		// Broadcast to everyone except sender
-		channel.broadcast(fullMsg, client.fd);
+		// Check if target is a channel (starts with # & ! +)
+		if (!target.empty() && (target[0] == '#' || target[0] == '&' || 
+		                        target[0] == '!' || target[0] == '+')) {
+			// CHANNEL MESSAGE
+			if (this->channels.find(target) == this->channels.end()){
+				sendNumericReply(client, ERR_NOSUCHCHANNEL, target + " :No such channel");
+				return;
+			}
+
+			Channel &channel = this->channels[target];
+			if (!channel.hasMember(client.fd)){
+				sendNumericReply(client, ERR_CANNOTSENDTOCHAN, target + " :Cannot send to channel");
+				return;
+			}
+
+			// RFC 2812: Check moderated mode (+m) - only ops and voiced can speak
+			if (channel.isModerated() && 
+			    !channel.isOperator(client.fd) && 
+			    !channel.hasVoice(client.fd)) {
+				sendNumericReply(client, ERR_CANNOTSENDTOCHAN, target + " :Cannot send to channel (+m)");
+				return;
+			}
+
+			std::string fullMsg = ":" + clientObj.getNickname() + 
+			                      "!" + clientObj.getUsername() + 
+			                      "@" + SERVER_IP + 
+			                      " PRIVMSG " + target + " :" + message + CLDR;
+			channel.broadcast(fullMsg, client.fd);
+		} else {
+			// USER-TO-USER MESSAGE (RFC 2812 Section 3.3.1)
+			int targetFd = -1;
+			for (std::map<int, Client>::iterator it = clientMap.begin(); it != clientMap.end(); ++it) {
+				if (it->second.getNickname() == target) {
+					targetFd = it->first;
+					break;
+				}
+			}
+
+			if (targetFd == -1) {
+				sendNumericReply(client, ERR_NOSUCHNICK, target + " :No such nick/channel");
+				return;
+			}
+
+			std::string privMsg = ":" + clientObj.getNickname() + 
+			                      "!" + clientObj.getUsername() + 
+			                      "@" + SERVER_IP + 
+			                      " PRIVMSG " + target + " :" + message + CLDR;
+
+			for (unsigned int i = 1; i < serverCapacity; i++) {
+				if (clients[i].fd == targetFd) {
+					sendMessage(clients[i], privMsg);
+					break;
+				}
+			}
+		}
 		return;
 	}
 	// ============================================
@@ -935,10 +1106,12 @@ void	Server::processCommand(pollfd& client, const std::string& command, const st
                                     " " + targetNick + " " + channelName + CLDR;
         sendMessage(client, invitingReply);
 
-        // Send INVITE message to the target user
-        std::string inviteMsg = ":" + SERVER_NAME + " NOTICE " + targetNick + 
-                                " :You have been invited to " + channelName + 
-                                " by " + clientObj.getNickname() + CLDR;
+        // RFC 2812: Send INVITE message to the target user
+        // Format: :inviter!user@host INVITE target #channel
+        std::string inviteMsg = ":" + clientObj.getNickname() + 
+                                "!" + clientObj.getUsername() + 
+                                "@" + SERVER_IP + 
+                                " INVITE " + targetNick + " " + channelName + CLDR;
         
         // Find the target's pollfd and send the message
         for (unsigned int i = 1; i < serverCapacity; i++) {
@@ -986,6 +1159,7 @@ void	Server::processCommand(pollfd& client, const std::string& command, const st
             
             if (chan.isInviteOnly()) modes += "i";
             if (chan.isTopicRestricted()) modes += "t";
+            if (chan.isModerated()) modes += "m";
             if (!chan.getKey().empty()) {
                 modes += "k";
                 modeParams += " " + chan.getKey();
@@ -1141,6 +1315,130 @@ void	Server::processCommand(pollfd& client, const std::string& command, const st
                     break;
                 }
 
+                // +m: Moderated channel (only ops and voiced can speak)
+                case 'm': {
+                    if (adding && !chan.isModerated()) {
+                        chan.setModerated(true);
+                        addedModes += 'm';
+                    } else if (!adding && chan.isModerated()) {
+                        chan.setModerated(false);
+                        removedModes += 'm';
+                    }
+                    break;
+                }
+
+                // +v: Voice privilege (can speak in moderated channel)
+                case 'v': {
+                    if (paramIndex >= params.size()) {
+                        sendNumericReply(client, ERR_NEEDMOREPARAMS, "MODE :Not enough parameters");
+                        return;
+                    }
+                    std::string targetNick = params[paramIndex++];
+                    
+                    // Find target user
+                    int targetFd = -1;
+                    for (std::map<int, Client>::iterator clientIt = clientMap.begin(); 
+                         clientIt != clientMap.end(); ++clientIt) {
+                        if (clientIt->second.getNickname() == targetNick) {
+                            targetFd = clientIt->first;
+                            break;
+                        }
+                    }
+                    
+                    if (targetFd == -1) {
+                        sendNumericReply(client, ERR_NOSUCHNICK, targetNick + " :No such nick/channel");
+                        continue;
+                    }
+                    
+                    if (!chan.hasMember(targetFd)) {
+                        sendNumericReply(client, ERR_USERNOTINCHANNEL, targetNick + " " + channelName + " :They aren't on that channel");
+                        continue;
+                    }
+                    
+                    if (adding && !chan.hasVoice(targetFd)) {
+                        chan.addVoice(targetFd);
+                        addedModes += 'v';
+                        addedParams += " " + targetNick;
+                    } else if (!adding && chan.hasVoice(targetFd)) {
+                        chan.removeVoice(targetFd);
+                        removedModes += 'v';
+                        removedParams += " " + targetNick;
+                    }
+                    break;
+                }
+
+                // +b: Ban mask (or list bans if no parameter)
+                case 'b': {
+                    if (adding) {
+                        // If no parameter, list bans (RPL_BANLIST)
+                        if (paramIndex >= params.size()) {
+                            const std::set<std::string>& bans = chan.getBanList();
+                            for (std::set<std::string>::const_iterator it = bans.begin(); 
+                                 it != bans.end(); ++it) {
+                                std::string banReply = ":" + SERVER_NAME + " 367 " + 
+                                                      clientObj.getNickname() + " " + 
+                                                      channelName + " " + *it + CLDR;
+                                sendMessage(client, banReply);
+                            }
+                            std::string endReply = ":" + SERVER_NAME + " 368 " + 
+                                                  clientObj.getNickname() + " " + 
+                                                  channelName + " :End of channel ban list" + CLDR;
+                            sendMessage(client, endReply);
+                            continue;
+                        }
+                        std::string mask = params[paramIndex++];
+                        chan.addBan(mask);
+                        addedModes += 'b';
+                        addedParams += " " + mask;
+                    } else {
+                        if (paramIndex >= params.size()) {
+                            sendNumericReply(client, ERR_NEEDMOREPARAMS, "MODE :Not enough parameters");
+                            return;
+                        }
+                        std::string mask = params[paramIndex++];
+                        chan.removeBan(mask);
+                        removedModes += 'b';
+                        removedParams += " " + mask;
+                    }
+                    break;
+                }
+
+                // +e: Exception mask (or list exceptions if no parameter)
+                case 'e': {
+                    if (adding) {
+                        // If no parameter, list exceptions (RPL_EXCEPTLIST)
+                        if (paramIndex >= params.size()) {
+                            const std::set<std::string>& exceptions = chan.getExceptionList();
+                            for (std::set<std::string>::const_iterator it = exceptions.begin(); 
+                                 it != exceptions.end(); ++it) {
+                                std::string exceptReply = ":" + SERVER_NAME + " 348 " + 
+                                                         clientObj.getNickname() + " " + 
+                                                         channelName + " " + *it + CLDR;
+                                sendMessage(client, exceptReply);
+                            }
+                            std::string endReply = ":" + SERVER_NAME + " 349 " + 
+                                                  clientObj.getNickname() + " " + 
+                                                  channelName + " :End of channel exception list" + CLDR;
+                            sendMessage(client, endReply);
+                            continue;
+                        }
+                        std::string mask = params[paramIndex++];
+                        chan.addException(mask);
+                        addedModes += 'e';
+                        addedParams += " " + mask;
+                    } else {
+                        if (paramIndex >= params.size()) {
+                            sendNumericReply(client, ERR_NEEDMOREPARAMS, "MODE :Not enough parameters");
+                            return;
+                        }
+                        std::string mask = params[paramIndex++];
+                        chan.removeException(mask);
+                        removedModes += 'e';
+                        removedParams += " " + mask;
+                    }
+                    break;
+                }
+
                 default:
                     // Unknown mode, ignore
                     break;
@@ -1171,6 +1469,74 @@ void	Server::processCommand(pollfd& client, const std::string& command, const st
 
         return;
     }
+	// ============================================
+    //  NOTICE COMMAND (RFC 2812 Section 3.3.2)
+    // ============================================
+	if (cmd == "NOTICE"){
+		Client &clientObj = clientMap[client.fd];
+		
+		// RFC 2812: NOTICE is like PRIVMSG but with NO automatic replies
+		// If errors occur, they are silently ignored (no error messages sent back)
+		if (params.size() < 2 || params[1].empty()){
+			return; // Silently ignore
+		}
+
+		std::string target = params[0];
+		std::string message = params[1];
+
+		// Check if target is a channel
+		if (!target.empty() && (target[0] == '#' || target[0] == '&' || 
+		                        target[0] == '!' || target[0] == '+')) {
+			// CHANNEL NOTICE
+			if (this->channels.find(target) == this->channels.end()){
+				return; // Silently ignore
+			}
+
+			Channel &channel = this->channels[target];
+			if (!channel.hasMember(client.fd)){
+				return; // Silently ignore
+			}
+
+			// RFC 2812: NOTICE also respects moderated mode (no error, just silently ignore)
+			if (channel.isModerated() && 
+			    !channel.isOperator(client.fd) && 
+			    !channel.hasVoice(client.fd)) {
+				return; // Silently ignore
+			}
+
+			std::string fullMsg = ":" + clientObj.getNickname() + 
+			                      "!" + clientObj.getUsername() + 
+			                      "@" + SERVER_IP + 
+			                      " NOTICE " + target + " :" + message + CLDR;
+			channel.broadcast(fullMsg, client.fd);
+		} else {
+			// USER-TO-USER NOTICE
+			int targetFd = -1;
+			for (std::map<int, Client>::iterator it = clientMap.begin(); it != clientMap.end(); ++it) {
+				if (it->second.getNickname() == target) {
+					targetFd = it->first;
+					break;
+				}
+			}
+
+			if (targetFd == -1) {
+				return; // Silently ignore
+			}
+
+			std::string noticeMsg = ":" + clientObj.getNickname() + 
+			                        "!" + clientObj.getUsername() + 
+			                        "@" + SERVER_IP + 
+			                        " NOTICE " + target + " :" + message + CLDR;
+
+			for (unsigned int i = 1; i < serverCapacity; i++) {
+				if (clients[i].fd == targetFd) {
+					sendMessage(clients[i], noticeMsg);
+					break;
+				}
+			}
+		}
+		return;
+	}
 
 	// Unknown command
 	sendNumericReply(client, ERR_UNKNOWNCOMMAND, command + " :Unknown command");

@@ -152,6 +152,7 @@
 	const std::string ERR_ALREADYREGISTRED("462");
 	const std::string ERR_CHANNELISFULL("471");
 	const std::string ERR_INVITEONLYCHAN("473");
+	const std::string ERR_BANNEDFROMCHAN("474");
 	const std::string ERR_BADCHANNELKEY("475");
 	const std::string ERR_BADCHANMASK("476");
 	const std::string ERR_CHANOPRIVSNEEDED("482");

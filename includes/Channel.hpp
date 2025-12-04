@@ -29,9 +29,13 @@ class Channel {
         std::set<int> channelMembers;  // Client FDs (only store FDs to avoid nickname issues)
         bool inviteOnly;               // +i mode
         bool topicRestricted;          // +t mode (only ops can change topic)
+        bool moderated;                // +m mode (only ops and voiced can speak)
         std::string key;               // Channel password (+k mode)
         int userLimit;                 // -1 = no limit (+l mode)
         std::set<int> operators;       // Operator FDs (+o mode)
+        std::set<int> voicedUsers;     // Voiced users (+v mode)
+        std::set<std::string> banMasks;      // Ban list (+b mode)
+        std::set<std::string> exceptionMasks; // Exception list (+e mode)
         
     public:
         // Constructors and destructor
@@ -60,6 +64,23 @@ class Channel {
         const std::set<int>& getOperators() const;
         size_t getOperatorCount() const;
         
+        // Voice management (+v mode)
+        void addVoice(int clientFd);
+        void removeVoice(int clientFd);
+        bool hasVoice(int clientFd) const;
+        
+        // Ban management (+b mode)
+        void addBan(const std::string& mask);
+        void removeBan(const std::string& mask);
+        bool isBanned(const std::string& userhost) const;
+        const std::set<std::string>& getBanList() const;
+        
+        // Exception management (+e mode)
+        void addException(const std::string& mask);
+        void removeException(const std::string& mask);
+        bool matchesException(const std::string& userhost) const;
+        const std::set<std::string>& getExceptionList() const;
+        
         // Broadcasting messages
         void broadcast(const std::string& message);
         void broadcast(const std::string& message, int excludeFd);
@@ -74,12 +95,14 @@ class Channel {
         // Mode Getters
         bool isInviteOnly() const;          // +i mode
         bool isTopicRestricted() const;     // +t mode
+        bool isModerated() const;           // +m mode
         std::string getKey() const;         // +k mode
         int getUserLimit() const;           // +l mode
             
         // Mode Setters
         void setInviteOnly(bool value);                  // +i mode
         void setTopicRestricted(bool value);             // +t mode
+        void setModerated(bool value);                   // +m mode
         void setKey(const std::string& password);        // +k mode
         void setUserLimit(int limit);                    // +l mode
         void setTopic(const std::string& newTopic);      // Topic content 
